@@ -72,7 +72,8 @@ export async function searchArxiv(
 
 function parseArxivEntry(entry: any): ArxivPaper {
   const id = entry.id[0];
-  const arxivId = id.split('/abs/')[1] || id.split('/')[-1];
+  const idParts = id.split('/');
+  const arxivId = id.split('/abs/')[1] || idParts[idParts.length - 1];
   
   const authors = entry.author?.map((a: any) => a.name[0]) || [];
   const categories = entry.category?.map((c: any) => c.$.term) || [];
