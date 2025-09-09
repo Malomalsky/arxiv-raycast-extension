@@ -1,21 +1,15 @@
-# arXiv Pro for Raycast
+# arXiv Pro
 
-Fast arXiv paper search with bookmarks and subscriptions.
+Advanced arXiv search extension for Raycast.
 
 ## Features
 
-- Search with field-specific queries (ti:, au:, abs:, cat:)
-- Filter by date and sort by relevance/date
-- Bookmark papers
-- Subscribe to categories, authors, keywords
-- Export citations as BibTeX
-
-## Commands
-
-- **Search arXiv Papers** - Main search with filters
-- **View Bookmarks** - Saved papers
-- **Topic Feed** - Papers from subscriptions
-- **Manage Subscriptions** - Add/remove subscriptions
+- Search with filters and sorting
+- Bookmarks with tags and ratings  
+- Topic/author/keyword subscriptions
+- Citation tracking
+- GOST citations
+- LaTeX formula rendering
 
 ## Installation
 
@@ -24,9 +18,6 @@ npm install
 npm run dev
 ```
 
-## Search Examples
+## License
 
-- `ti:transformer` - Search in title
-- `au:LeCun` - Search by author
-- `cat:cs.AI` - Search in category
-- `ti:neural AND au:bengio` - Combined search
+MIT
