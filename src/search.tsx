@@ -38,11 +38,10 @@ export default function SearchCommand() {
   const preferences = getPreferenceValues<Preferences>();
 
   useEffect(() => {
-    // Load user preferences
     setFilter({
       sortBy: preferences.defaultSortBy || 'relevance',
       sortOrder: 'descending',
-      dateRange: preferences.defaultDateRange || 'month'
+      dateRange: 'all'
     });
   }, []);
 
@@ -84,6 +83,14 @@ export default function SearchCommand() {
           };
         }));
         
+        if (filter.sortBy === 'citationCount') {
+          papersWithCitations.sort((a, b) => {
+            const aCount = a.citationCount || 0;
+            const bCount = b.citationCount || 0;
+            return filter.sortOrder === 'ascending' ? aCount - bCount : bCount - aCount;
+          });
+        }
+        
         return { papers: papersWithCitations, totalResults: result.totalResults };
       } catch (error) {
         showToast({ style: Toast.Style.Failure, title: "Search failed", message: String(error) });
@@ -108,29 +115,20 @@ export default function SearchCommand() {
       isShowingDetail={isShowingDetail}
       searchBarAccessory={
         <List.Dropdown
-          tooltip="Filter Options"
-          value={`${filter.sortBy}-${filter.dateRange}`}
+          tooltip="Sort By"
+          value={filter.sortBy}
           onChange={(value) => {
-            const [sortBy, dateRange] = value.split('-');
             setFilter({
               ...filter,
-              sortBy: sortBy as any,
-              dateRange: dateRange as any
+              sortBy: value as any
             });
             revalidate();
           }}
         >
-          <List.Dropdown.Section title="Sort By">
-            <List.Dropdown.Item title="📊 Relevance" value="relevance-month" />
-            <List.Dropdown.Item title="🆕 Most Recent" value="submittedDate-month" />
-            <List.Dropdown.Item title="🔄 Recently Updated" value="lastUpdatedDate-month" />
-          </List.Dropdown.Section>
-          <List.Dropdown.Section title="Date Range">
-            <List.Dropdown.Item title="📅 All Time" value={`${filter.sortBy}-all`} />
-            <List.Dropdown.Item title="📅 This Week" value={`${filter.sortBy}-week`} />
-            <List.Dropdown.Item title="📅 This Month" value={`${filter.sortBy}-month`} />
-            <List.Dropdown.Item title="📅 This Year" value={`${filter.sortBy}-year`} />
-          </List.Dropdown.Section>
+          <List.Dropdown.Item title="Relevance" value="relevance" />
+          <List.Dropdown.Item title="Most Recent" value="submittedDate" />
+          <List.Dropdown.Item title="Most Cited" value="citationCount" />
+          <List.Dropdown.Item title="Recently Updated" value="lastUpdatedDate" />
         </List.Dropdown>
       }
     >
@@ -272,7 +270,6 @@ function PaperListItem({
               icon={Icon.Download}
               onAction={async () => {
                 await downloadPDF(paper);
-                await setReadingStatus(paper.id, 'reading');
               }}
               shortcut={{ modifiers: ["cmd"], key: "d" }}
             />

@@ -38,9 +38,9 @@ export interface Subscription {
 }
 
 export interface SearchFilter {
-  sortBy: 'relevance' | 'submittedDate' | 'lastUpdatedDate';
+  sortBy: 'relevance' | 'submittedDate' | 'lastUpdatedDate' | 'citationCount';
   sortOrder: 'ascending' | 'descending';
-  dateRange?: 'today' | 'week' | 'month' | 'year' | 'custom';
+  dateRange?: 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
   customDateStart?: Date;
   customDateEnd?: Date;
   categories?: string[];
