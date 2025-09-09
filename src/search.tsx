@@ -27,7 +27,7 @@ export default function SearchCommand() {
   const [filter, setFilter] = useState<SearchFilter>({
     sortBy: 'relevance',
     sortOrder: 'descending',
-    dateRange: 'month'
+    dateRange: 'all'
   });
   const [isShowingDetail, setIsShowingDetail] = useState(false);
   
@@ -44,7 +44,7 @@ export default function SearchCommand() {
 
   const { data, isLoading, revalidate } = useCachedPromise(
     async (query: string, filter: SearchFilter) => {
-      if (!query || query.length < 2) {
+      if (!query || query.length < 1) {
         return { papers: [], totalResults: 0 };
       }
 
@@ -108,10 +108,10 @@ export default function SearchCommand() {
             <List.Dropdown.Item title="🔄 Recently Updated" value="lastUpdatedDate-month" />
           </List.Dropdown.Section>
           <List.Dropdown.Section title="Date Range">
+            <List.Dropdown.Item title="📅 All Time" value={`${filter.sortBy}-all`} />
             <List.Dropdown.Item title="📅 This Week" value={`${filter.sortBy}-week`} />
             <List.Dropdown.Item title="📅 This Month" value={`${filter.sortBy}-month`} />
             <List.Dropdown.Item title="📅 This Year" value={`${filter.sortBy}-year`} />
-            <List.Dropdown.Item title="📅 All Time" value={`${filter.sortBy}-all`} />
           </List.Dropdown.Section>
         </List.Dropdown>
       }

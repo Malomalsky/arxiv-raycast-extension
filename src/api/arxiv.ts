@@ -29,7 +29,7 @@ export async function searchArxiv(
   let searchQuery = query;
   
   // Add date filter if specified
-  if (filter?.dateRange) {
+  if (filter?.dateRange && filter.dateRange !== 'all') {
     const dateFilter = buildDateFilter(filter.dateRange, filter.customDateStart, filter.customDateEnd);
     if (dateFilter) {
       searchQuery = searchQuery ? `${searchQuery}+AND+${dateFilter}` : dateFilter;

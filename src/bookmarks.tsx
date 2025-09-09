@@ -120,9 +120,9 @@ export default function BookmarksCommand() {
           icon={Icon.Bookmark}
           actions={
             <ActionPanel>
-              <Action.Push
+              <Action.Open
                 title="Search Papers"
-                target={<SearchCommand />}
+                target="raycast://extensions/ivan/arxiv-pro/search"
                 icon={Icon.MagnifyingGlass}
               />
             </ActionPanel>
@@ -234,5 +234,3 @@ function getCategoryColor(category: string): Color {
   if (category.startsWith('eess.')) return Color.PrimaryText;
   return Color.SecondaryText;
 }
-
-import SearchCommand from "./search";

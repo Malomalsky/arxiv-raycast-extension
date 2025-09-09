@@ -4,3 +4,17 @@ dist/
 *.log
 .env
 .raycast/
+
+# Claude files
+.claude*
+*.claude
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build files
+build/
+*.tsbuildinfo

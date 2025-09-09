@@ -98,9 +98,9 @@ export default function FeedCommand() {
           icon={Icon.Bookmark}
           actions={
             <ActionPanel>
-              <Action.Push
+              <Action.Open
                 title="Manage Subscriptions"
-                target={<SubscriptionsCommand />}
+                target="raycast://extensions/ivan/arxiv-pro/subscriptions"
                 icon={Icon.Gear}
               />
             </ActionPanel>
@@ -235,5 +235,3 @@ function getCategoryColor(category: string): Color {
   if (category.startsWith('eess.')) return Color.PrimaryText;
   return Color.SecondaryText;
 }
-
-import SubscriptionsCommand from "./subscriptions";
