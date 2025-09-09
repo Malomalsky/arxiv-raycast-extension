@@ -13,7 +13,9 @@ export interface ArxivPaper {
   comment?: string;
   journalRef?: string;
   doi?: string;
-  citations?: number;
+  citationCount?: number;
+  readingStatus?: 'new' | 'reading' | 'read';
+  isDownloaded?: boolean;
 }
 
 export interface Bookmark {

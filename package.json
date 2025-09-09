@@ -10,6 +10,24 @@
     "Web"
   ],
   "license": "MIT",
+  "preferences": [
+    {
+      "name": "downloadPath",
+      "title": "PDF Download Path",
+      "description": "Directory where PDFs will be saved",
+      "type": "textfield",
+      "default": "~/Downloads/Papers",
+      "required": false
+    },
+    {
+      "name": "autoOpenPDF",
+      "title": "Auto Open PDFs",
+      "description": "Automatically open PDFs after download",
+      "type": "checkbox",
+      "default": true,
+      "required": false
+    }
+  ],
   "commands": [
     {
       "name": "search",

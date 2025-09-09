@@ -7,7 +7,12 @@
 
 /* eslint-disable @typescript-eslint/ban-types */
 
-type ExtensionPreferences = {}
+type ExtensionPreferences = {
+  /** PDF Download Path - Directory where PDFs will be saved */
+  "downloadPath": string,
+  /** Auto Open PDFs - Automatically open PDFs after download */
+  "autoOpenPDF": boolean
+}
 
 /** Preferences accessible in all the extension's commands */
 declare type Preferences = ExtensionPreferences

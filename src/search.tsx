@@ -13,8 +13,12 @@ import {
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { searchArxiv, buildSmartQuery, generateBibTeX } from "./api/arxiv";
+import { getBatchCitations } from "./api/semanticScholar";
 import { ArxivPaper, SearchFilter, SearchHistory, ARXIV_CATEGORIES } from "./types";
 import { format } from "date-fns";
+import { downloadPDF } from "./utils/pdfManager";
+import { getReadingStatus, setReadingStatus, isDownloaded } from "./utils/readingStatus";
+import { generateGOSTCitation } from "./utils/gostCitation";
 
 interface Preferences {
   defaultSortBy: 'relevance' | 'submittedDate' | 'lastUpdatedDate';
@@ -59,14 +63,28 @@ export default function SearchCommand() {
         const result = await searchArxiv(query, filter, 50);
         history.resultsCount = result.totalResults;
         
-        // Save search history
         const historyKey = 'search-history';
         const existingHistory = await LocalStorage.getItem<string>(historyKey);
         const historyArray = existingHistory ? JSON.parse(existingHistory) : [];
         historyArray.unshift(history);
         await LocalStorage.setItem(historyKey, JSON.stringify(historyArray.slice(0, 100)));
         
-        return result;
+        const arxivIds = result.papers.map(p => p.arxivId);
+        const citations = await getBatchCitations(arxivIds);
+        
+        const papersWithCitations = await Promise.all(result.papers.map(async (paper) => {
+          const citationCount = citations.get(paper.arxivId);
+          const status = await getReadingStatus(paper.id);
+          const downloaded = await isDownloaded(paper.id);
+          return {
+            ...paper,
+            citationCount,
+            readingStatus: status,
+            isDownloaded: downloaded
+          };
+        }));
+        
+        return { papers: papersWithCitations, totalResults: result.totalResults };
       } catch (error) {
         showToast({ style: Toast.Style.Failure, title: "Search failed", message: String(error) });
         return { papers: [], totalResults: 0 };
@@ -189,16 +207,23 @@ function PaperListItem({
   const categoryColor = getCategoryColor(paper.primaryCategory);
   const formattedDate = format(paper.published, 'MMM d, yyyy');
   
+  const accessories = [
+    paper.citationCount !== undefined && paper.citationCount > 0 && 
+      { text: `${paper.citationCount} cit`, tooltip: `${paper.citationCount} citations` },
+    { tag: { value: paper.primaryCategory, color: categoryColor } },
+    { text: formattedDate },
+    paper.isDownloaded && { icon: Icon.Download, tooltip: "Downloaded" },
+    paper.readingStatus === 'reading' && { icon: Icon.Eye, tooltip: "Reading" },
+    paper.readingStatus === 'read' && { icon: Icon.Checkmark, tooltip: "Read" },
+    isBookmarked && { icon: Icon.Bookmark, tooltip: "Bookmarked" }
+  ].filter(Boolean) as any;
+  
   return (
     <List.Item
       id={paper.id}
       title={paper.title}
       subtitle={paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ' et al.' : '')}
-      accessories={[
-        { tag: { value: paper.primaryCategory, color: categoryColor } },
-        { text: formattedDate },
-        isBookmarked && { icon: Icon.Bookmark, tooltip: "Bookmarked" }
-      ].filter(Boolean) as any}
+      accessories={accessories}
       detail={
         isShowingDetail && (
           <List.Item.Detail
@@ -242,10 +267,13 @@ function PaperListItem({
         <ActionPanel>
           <ActionPanel.Section>
             <Action.OpenInBrowser title="Open in arXiv" url={paper.arxivUrl} />
-            <Action.OpenInBrowser
-              title="Download PDF"
-              url={paper.pdfUrl}
+            <Action
+              title="Download and Open PDF"
               icon={Icon.Download}
+              onAction={async () => {
+                await downloadPDF(paper);
+                await setReadingStatus(paper.id, 'reading');
+              }}
               shortcut={{ modifiers: ["cmd"], key: "d" }}
             />
             <Action
@@ -254,11 +282,36 @@ function PaperListItem({
               onAction={toggleBookmark}
               shortcut={{ modifiers: ["cmd"], key: "b" }}
             />
+          </ActionPanel.Section>
+          <ActionPanel.Section title="Citations">
             <Action.CopyToClipboard
               title="Copy BibTeX"
               content={generateBibTeX(paper)}
               icon={Icon.Document}
               shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+            />
+            <Action.CopyToClipboard
+              title="Copy GOST Citation"
+              content={generateGOSTCitation(paper)}
+              icon={Icon.Document}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "g" }}
+            />
+          </ActionPanel.Section>
+          <ActionPanel.Section title="Reading Status">
+            <Action
+              title="Mark as Read"
+              icon={Icon.Checkmark}
+              onAction={() => setReadingStatus(paper.id, 'read')}
+            />
+            <Action
+              title="Mark as Reading"
+              icon={Icon.Eye}
+              onAction={() => setReadingStatus(paper.id, 'reading')}
+            />
+            <Action
+              title="Mark as New"
+              icon={Icon.Circle}
+              onAction={() => setReadingStatus(paper.id, 'new')}
             />
           </ActionPanel.Section>
           <ActionPanel.Section>
