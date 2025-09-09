@@ -3,7 +3,7 @@
   "name": "arxiv-pro",
   "title": "arXiv Pro",
   "description": "Advanced arXiv search with smart filters, bookmarks, and topic subscriptions",
-  "icon": "assets/icon.png",
+  "icon": "icon.png",
   "author": "ivan",
   "categories": [
     "Productivity",
@@ -24,6 +24,7 @@
       "title": "Auto Open PDFs",
       "description": "Automatically open PDFs after download",
       "type": "checkbox",
+      "label": "Enable automatic PDF opening",
       "default": true,
       "required": false
     }
@@ -35,7 +36,7 @@
       "subtitle": "arXiv Pro",
       "description": "Search papers with smart filters",
       "mode": "view",
-      "icon": "assets/icon.png"
+      "icon": "icon.png"
     },
     {
       "name": "bookmarks",
@@ -43,7 +44,7 @@
       "subtitle": "arXiv Pro",
       "description": "View and manage saved papers",
       "mode": "view",
-      "icon": "assets/icon.png"
+      "icon": "icon.png"
     },
     {
       "name": "feedSelector",
@@ -51,7 +52,7 @@
       "subtitle": "arXiv Pro",
       "description": "View papers from subscribed topics",
       "mode": "view",
-      "icon": "assets/icon.png"
+      "icon": "icon.png"
     },
     {
       "name": "subscriptions",
@@ -59,7 +60,7 @@
       "subtitle": "arXiv Pro",
       "description": "Manage topic and author subscriptions",
       "mode": "view",
-      "icon": "assets/icon.png"
+      "icon": "icon.png"
     }
   ],
   "dependencies": {
