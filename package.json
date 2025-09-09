@@ -34,28 +34,32 @@
       "title": "Search arXiv Papers",
       "subtitle": "arXiv Pro",
       "description": "Search papers with smart filters",
-      "mode": "view"
+      "mode": "view",
+      "icon": "assets/icon.png"
     },
     {
       "name": "bookmarks",
       "title": "View Bookmarks",
       "subtitle": "arXiv Pro",
       "description": "View and manage saved papers",
-      "mode": "view"
+      "mode": "view",
+      "icon": "assets/icon.png"
     },
     {
       "name": "feed",
       "title": "Topic Feed",
       "subtitle": "arXiv Pro",
       "description": "View papers from subscribed topics",
-      "mode": "view"
+      "mode": "view",
+      "icon": "assets/icon.png"
     },
     {
       "name": "subscriptions",
       "title": "Manage Subscriptions",
       "subtitle": "arXiv Pro",
       "description": "Manage topic and author subscriptions",
-      "mode": "view"
+      "mode": "view",
+      "icon": "assets/icon.png"
     }
   ],
   "dependencies": {

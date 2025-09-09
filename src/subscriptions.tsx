@@ -15,6 +15,7 @@ import {
 } from "@raycast/api";
 import { Subscription, ARXIV_CATEGORIES } from "./types";
 import { format } from "date-fns";
+import { SubscriptionFeed } from "./SubscriptionFeed";
 
 export default function SubscriptionsCommand() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -239,9 +240,9 @@ function SubscriptionItem({
       actions={
         <ActionPanel>
           <ActionPanel.Section>
-            <Action.Open
+            <Action.Push
               title="View Feed"
-              target="raycast://extensions/ivan/arxiv-pro/feed"
+              target={<SubscriptionFeed subscription={subscription} />}
               icon={Icon.List}
             />
             <Action
