@@ -17,8 +17,8 @@ Advanced arXiv search extension for Raycast.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/arxiv-pro.git
-cd arxiv-pro
+git clone https://github.com/Malomalsky/arxiv-raycast-extension.git
+cd arxiv-raycast-extension
 ```
 
 2. Install dependencies:
