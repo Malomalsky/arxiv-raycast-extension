@@ -15,6 +15,8 @@ import {
 import { Bookmark, ArxivPaper } from "./types";
 import { format } from "date-fns";
 import { generateBibTeX } from "./api/arxiv";
+import { formatLatexTitle } from "./utils/latexFormatter";
+import { generateGOSTCitation } from "./utils/gostCitation";
 
 export default function BookmarksCommand() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -166,14 +168,15 @@ function BookmarkItem({
 }) {
   const paper = bookmark.paper;
   const categoryColor = getCategoryColor(paper.primaryCategory);
+  const addedDate = new Date(bookmark.addedAt);
   
   return (
     <List.Item
-      title={paper.title}
-      subtitle={paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ' et al.' : '')}
+      title={formatLatexTitle(paper.title)}
+      subtitle={paper.authors.slice(0, 2).join(', ') + (paper.authors.length > 2 ? ' et al.' : '')}
       accessories={[
         { tag: { value: paper.primaryCategory, color: categoryColor } },
-        { text: format(bookmark.addedAt, 'MMM d') },
+        { text: format(addedDate, 'MMM d') },
         bookmark.rating && { text: '⭐'.repeat(bookmark.rating) },
         bookmark.tags.length > 0 && { 
           tag: { value: `${bookmark.tags.length} tags`, color: Color.SecondaryText } 
@@ -201,6 +204,12 @@ function BookmarkItem({
               content={generateBibTeX(paper)}
               icon={Icon.Document}
               shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+            />
+            <Action.CopyToClipboard
+              title="Copy GOST Citation"
+              content={generateGOSTCitation(paper)}
+              icon={Icon.Document}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "g" }}
             />
           </ActionPanel.Section>
           <ActionPanel.Section>

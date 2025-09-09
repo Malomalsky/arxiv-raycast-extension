@@ -19,6 +19,7 @@ import { format } from "date-fns";
 import { downloadPDF } from "./utils/pdfManager";
 import { getReadingStatus, setReadingStatus, isDownloaded } from "./utils/readingStatus";
 import { generateGOSTCitation } from "./utils/gostCitation";
+import { formatLatexTitle } from "./utils/latexFormatter";
 
 interface Preferences {
   defaultSortBy: 'relevance' | 'submittedDate' | 'lastUpdatedDate';
@@ -224,8 +225,8 @@ function PaperListItem({
   return (
     <List.Item
       id={paper.id}
-      title={paper.title}
-      subtitle={`${authorsStr} • ${year}`}
+      title={formatLatexTitle(paper.title)}
+      subtitle={`${authorsStr}, ${year}`}
       accessories={accessories}
       detail={
         isShowingDetail && (

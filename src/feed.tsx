@@ -13,6 +13,8 @@ import { useCachedPromise } from "@raycast/utils";
 import { getRecentPapers, generateBibTeX } from "./api/arxiv";
 import { ArxivPaper, Subscription } from "./types";
 import { format, isToday, isYesterday, differenceInDays } from "date-fns";
+import { formatLatexTitle } from "./utils/latexFormatter";
+import { generateGOSTCitation } from "./utils/gostCitation";
 
 export default function FeedCommand() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -178,7 +180,7 @@ function FeedItem({
   
   return (
     <List.Item
-      title={paper.title}
+      title={formatLatexTitle(paper.title)}
       subtitle={paper.authors.slice(0, 2).join(', ') + (paper.authors.length > 2 ? ' et al.' : '')}
       accessories={[
         { tag: { value: paper.primaryCategory, color: categoryColor } },
@@ -205,6 +207,12 @@ function FeedItem({
               content={generateBibTeX(paper)}
               icon={Icon.Document}
               shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+            />
+            <Action.CopyToClipboard
+              title="Copy GOST Citation"
+              content={generateGOSTCitation(paper)}
+              icon={Icon.Document}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "g" }}
             />
           </ActionPanel.Section>
         </ActionPanel>
