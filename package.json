@@ -1,0 +1,66 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "arxiv-pro",
+  "title": "arXiv Pro",
+  "description": "Advanced arXiv search with smart filters, bookmarks, and topic subscriptions",
+  "icon": "icon.png",
+  "author": "ivan",
+  "categories": [
+    "Productivity",
+    "Web"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "search",
+      "title": "Search arXiv Papers",
+      "subtitle": "arXiv Pro",
+      "description": "Search papers with smart filters",
+      "mode": "view"
+    },
+    {
+      "name": "bookmarks",
+      "title": "View Bookmarks",
+      "subtitle": "arXiv Pro",
+      "description": "View and manage saved papers",
+      "mode": "view"
+    },
+    {
+      "name": "feed",
+      "title": "Topic Feed",
+      "subtitle": "arXiv Pro",
+      "description": "View papers from subscribed topics",
+      "mode": "view"
+    },
+    {
+      "name": "subscriptions",
+      "title": "Manage Subscriptions",
+      "subtitle": "arXiv Pro",
+      "description": "Manage topic and author subscriptions",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.64.0",
+    "@raycast/utils": "^1.10.1",
+    "date-fns": "^3.0.0",
+    "node-fetch": "^3.3.2",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.8",
+    "@types/node": "20.8.10",
+    "@types/react": "18.2.45",
+    "@types/xml2js": "^0.4.14",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
