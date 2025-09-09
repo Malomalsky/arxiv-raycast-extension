@@ -17,68 +17,89 @@ import { formatLatexTitle } from "./utils/latexFormatter";
 import { generateGOSTCitation } from "./utils/gostCitation";
 import { downloadPDF } from "./utils/pdfManager";
 
-export function SubscriptionFeed({ subscription }: { subscription: Subscription }) {
+export function SubscriptionFeed({
+  subscription,
+}: {
+  subscription: Subscription;
+}) {
   const { data: papers, isLoading } = useCachedPromise(
     async (sub: Subscription) => {
       try {
         let papers: ArxivPaper[] = [];
-        
-        if (sub.type === 'category') {
+
+        if (sub.type === "category") {
           papers = await getRecentPapers([sub.value], 100);
-        } else if (sub.type === 'author') {
-          const result = await searchArxiv(`au:"${sub.value}"`, {
-            sortBy: 'submittedDate',
-            sortOrder: 'descending'
-          }, 50);
+        } else if (sub.type === "author") {
+          const result = await searchArxiv(
+            `au:"${sub.value}"`,
+            {
+              sortBy: "submittedDate",
+              sortOrder: "descending",
+            },
+            50,
+          );
           papers = result.papers;
-        } else if (sub.type === 'keyword') {
-          const result = await searchArxiv(`all:"${sub.value}"`, {
-            sortBy: 'submittedDate',
-            sortOrder: 'descending'
-          }, 50);
+        } else if (sub.type === "keyword") {
+          const result = await searchArxiv(
+            `all:"${sub.value}"`,
+            {
+              sortBy: "submittedDate",
+              sortOrder: "descending",
+            },
+            50,
+          );
           papers = result.papers;
         }
-        
+
         return papers;
       } catch (error) {
-        showToast({ style: Toast.Style.Failure, title: "Failed to load papers" });
+        showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to load papers",
+        });
         return [];
       }
     },
     [subscription],
     {
       keepPreviousData: true,
-    }
+    },
   );
 
   const groupedPapers = groupPapersByDate(papers || []);
 
   async function toggleBookmark(paper: ArxivPaper) {
-    const bookmarksKey = 'bookmarks';
+    const bookmarksKey = "bookmarks";
     const bookmarksStr = await LocalStorage.getItem<string>(bookmarksKey);
     const bookmarks = bookmarksStr ? JSON.parse(bookmarksStr) : [];
-    
+
     const isBookmarked = bookmarks.some((b: any) => b.paperId === paper.id);
-    
+
     if (isBookmarked) {
       const filtered = bookmarks.filter((b: any) => b.paperId !== paper.id);
       await LocalStorage.setItem(bookmarksKey, JSON.stringify(filtered));
-      showToast({ style: Toast.Style.Success, title: "Removed from bookmarks" });
+      showToast({
+        style: Toast.Style.Success,
+        title: "Removed from bookmarks",
+      });
     } else {
       bookmarks.unshift({
         paperId: paper.id,
         paper,
         addedAt: new Date(),
-        tags: []
+        tags: [],
       });
       await LocalStorage.setItem(bookmarksKey, JSON.stringify(bookmarks));
       showToast({ style: Toast.Style.Success, title: "Added to bookmarks" });
     }
   }
 
-  const icon = subscription.type === 'category' ? Icon.Tag : 
-               subscription.type === 'author' ? Icon.Person : 
-               Icon.MagnifyingGlass;
+  const icon =
+    subscription.type === "category"
+      ? Icon.Tag
+      : subscription.type === "author"
+        ? Icon.Person
+        : Icon.MagnifyingGlass;
 
   return (
     <List
@@ -87,7 +108,11 @@ export function SubscriptionFeed({ subscription }: { subscription: Subscription 
       searchBarPlaceholder="Search in this subscription..."
     >
       {Object.entries(groupedPapers).map(([dateLabel, papers]) => (
-        <List.Section key={dateLabel} title={dateLabel} subtitle={`${papers.length} papers`}>
+        <List.Section
+          key={dateLabel}
+          title={dateLabel}
+          subtitle={`${papers.length} papers`}
+        >
           {papers.map((paper) => (
             <FeedItem
               key={paper.id}
@@ -98,7 +123,7 @@ export function SubscriptionFeed({ subscription }: { subscription: Subscription 
           ))}
         </List.Section>
       ))}
-      
+
       {papers?.length === 0 && !isLoading && (
         <List.EmptyView
           title="No papers found"
@@ -113,7 +138,7 @@ export function SubscriptionFeed({ subscription }: { subscription: Subscription 
 function FeedItem({
   paper,
   subscription,
-  onBookmark
+  onBookmark,
 }: {
   paper: ArxivPaper;
   subscription: Subscription;
@@ -122,15 +147,20 @@ function FeedItem({
   const categoryColor = getCategoryColor(paper.primaryCategory);
   const timeAgo = getTimeAgo(paper.published);
   const year = paper.published.getFullYear();
-  const authorsStr = paper.authors.slice(0, 2).join(', ') + (paper.authors.length > 2 ? ' et al.' : '');
-  
+  const authorsStr =
+    paper.authors.slice(0, 2).join(", ") +
+    (paper.authors.length > 2 ? " et al." : "");
+
   return (
     <List.Item
       title={formatLatexTitle(paper.title)}
       subtitle={`${authorsStr}, ${year}`}
       accessories={[
         { tag: { value: paper.primaryCategory, color: categoryColor } },
-        { text: timeAgo, tooltip: format(paper.published, 'MMM d, yyyy HH:mm') }
+        {
+          text: timeAgo,
+          tooltip: format(paper.published, "MMM d, yyyy HH:mm"),
+        },
       ]}
       actions={
         <ActionPanel>
@@ -190,37 +220,37 @@ function FeedItem({
 
 function groupPapersByDate(papers: ArxivPaper[]) {
   const grouped: Record<string, ArxivPaper[]> = {};
-  
-  papers.forEach(paper => {
+
+  papers.forEach((paper) => {
     const date = paper.published;
     let label: string;
-    
+
     if (isToday(date)) {
-      label = 'Today';
+      label = "Today";
     } else if (isYesterday(date)) {
-      label = 'Yesterday';
+      label = "Yesterday";
     } else if (differenceInDays(new Date(), date) < 7) {
-      label = format(date, 'EEEE');
+      label = format(date, "EEEE");
     } else if (differenceInDays(new Date(), date) < 30) {
       label = `${Math.floor(differenceInDays(new Date(), date) / 7)} weeks ago`;
     } else {
-      label = format(date, 'MMMM yyyy');
+      label = format(date, "MMMM yyyy");
     }
-    
+
     if (!grouped[label]) {
       grouped[label] = [];
     }
     grouped[label].push(paper);
   });
-  
+
   return grouped;
 }
 
 function getTimeAgo(date: Date): string {
   const days = differenceInDays(new Date(), date);
-  
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
+
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
   if (days < 7) return `${days}d ago`;
   if (days < 30) return `${Math.floor(days / 7)}w ago`;
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
@@ -228,13 +258,14 @@ function getTimeAgo(date: Date): string {
 }
 
 function getCategoryColor(category: string): Color {
-  if (category.startsWith('cs.')) return Color.Blue;
-  if (category.startsWith('math.')) return Color.Green;
-  if (category.startsWith('physics.') || category.includes('-ph')) return Color.Orange;
-  if (category.startsWith('q-bio.')) return Color.Purple;
-  if (category.startsWith('q-fin.')) return Color.Yellow;
-  if (category.startsWith('stat.')) return Color.Red;
-  if (category.startsWith('econ.')) return Color.Magenta;
-  if (category.startsWith('eess.')) return Color.PrimaryText;
+  if (category.startsWith("cs.")) return Color.Blue;
+  if (category.startsWith("math.")) return Color.Green;
+  if (category.startsWith("physics.") || category.includes("-ph"))
+    return Color.Orange;
+  if (category.startsWith("q-bio.")) return Color.Purple;
+  if (category.startsWith("q-fin.")) return Color.Yellow;
+  if (category.startsWith("stat.")) return Color.Red;
+  if (category.startsWith("econ.")) return Color.Magenta;
+  if (category.startsWith("eess.")) return Color.PrimaryText;
   return Color.SecondaryText;
 }

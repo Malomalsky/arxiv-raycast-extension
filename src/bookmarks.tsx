@@ -29,13 +29,16 @@ export default function BookmarksCommand() {
 
   async function loadBookmarks() {
     try {
-      const bookmarksStr = await LocalStorage.getItem<string>('bookmarks');
+      const bookmarksStr = await LocalStorage.getItem<string>("bookmarks");
       if (bookmarksStr) {
         const bookmarkList = JSON.parse(bookmarksStr);
         setBookmarks(bookmarkList);
       }
     } catch (error) {
-      showToast({ style: Toast.Style.Failure, title: "Failed to load bookmarks" });
+      showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to load bookmarks",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -52,17 +55,21 @@ export default function BookmarksCommand() {
     });
 
     if (confirmed) {
-      const filtered = bookmarks.filter(b => b.paperId !== paperId);
+      const filtered = bookmarks.filter((b) => b.paperId !== paperId);
       setBookmarks(filtered);
-      await LocalStorage.setItem('bookmarks', JSON.stringify(filtered));
-      showToast({ style: Toast.Style.Success, title: "Removed from bookmarks" });
+      await LocalStorage.setItem("bookmarks", JSON.stringify(filtered));
+      showToast({
+        style: Toast.Style.Success,
+        title: "Removed from bookmarks",
+      });
     }
   }
 
   async function clearAllBookmarks() {
     const confirmed = await confirmAlert({
       title: "Clear All Bookmarks",
-      message: "Are you sure you want to remove all bookmarks? This cannot be undone.",
+      message:
+        "Are you sure you want to remove all bookmarks? This cannot be undone.",
       primaryAction: {
         title: "Clear All",
         style: Alert.ActionStyle.Destructive,
@@ -71,23 +78,31 @@ export default function BookmarksCommand() {
 
     if (confirmed) {
       setBookmarks([]);
-      await LocalStorage.setItem('bookmarks', JSON.stringify([]));
+      await LocalStorage.setItem("bookmarks", JSON.stringify([]));
       showToast({ style: Toast.Style.Success, title: "All bookmarks cleared" });
     }
   }
 
   async function exportBookmarks() {
-    const bibtex = bookmarks.map(b => generateBibTeX(b.paper)).join('\n\n');
+    const bibtex = bookmarks.map((b) => generateBibTeX(b.paper)).join("\n\n");
     await Clipboard.copy(bibtex);
-    showToast({ style: Toast.Style.Success, title: "BibTeX copied to clipboard" });
+    showToast({
+      style: Toast.Style.Success,
+      title: "BibTeX copied to clipboard",
+    });
   }
 
   const filteredBookmarks = searchText
-    ? bookmarks.filter(b => 
-        b.paper.title.toLowerCase().includes(searchText.toLowerCase()) ||
-        b.paper.authors.some(a => a.toLowerCase().includes(searchText.toLowerCase())) ||
-        b.paper.abstract.toLowerCase().includes(searchText.toLowerCase()) ||
-        b.tags.some(t => t.toLowerCase().includes(searchText.toLowerCase()))
+    ? bookmarks.filter(
+        (b) =>
+          b.paper.title.toLowerCase().includes(searchText.toLowerCase()) ||
+          b.paper.authors.some((a) =>
+            a.toLowerCase().includes(searchText.toLowerCase()),
+          ) ||
+          b.paper.abstract.toLowerCase().includes(searchText.toLowerCase()) ||
+          b.tags.some((t) =>
+            t.toLowerCase().includes(searchText.toLowerCase()),
+          ),
       )
     : bookmarks;
 
@@ -131,7 +146,7 @@ export default function BookmarksCommand() {
           }
         />
       )}
-      
+
       {bookmarks.length > 0 && (
         <List.Section>
           <List.Item
@@ -161,7 +176,7 @@ export default function BookmarksCommand() {
 
 function BookmarkItem({
   bookmark,
-  onRemove
+  onRemove,
 }: {
   bookmark: Bookmark;
   onRemove: () => void;
@@ -169,19 +184,27 @@ function BookmarkItem({
   const paper = bookmark.paper;
   const categoryColor = getCategoryColor(paper.primaryCategory);
   const addedDate = new Date(bookmark.addedAt);
-  
+
   return (
     <List.Item
       title={formatLatexTitle(paper.title)}
-      subtitle={paper.authors.slice(0, 2).join(', ') + (paper.authors.length > 2 ? ' et al.' : '')}
-      accessories={[
-        { tag: { value: paper.primaryCategory, color: categoryColor } },
-        { text: format(addedDate, 'MMM d') },
-        bookmark.rating && { text: '⭐'.repeat(bookmark.rating) },
-        bookmark.tags.length > 0 && { 
-          tag: { value: `${bookmark.tags.length} tags`, color: Color.SecondaryText } 
-        }
-      ].filter(Boolean) as any}
+      subtitle={
+        paper.authors.slice(0, 2).join(", ") +
+        (paper.authors.length > 2 ? " et al." : "")
+      }
+      accessories={
+        [
+          { tag: { value: paper.primaryCategory, color: categoryColor } },
+          { text: format(addedDate, "MMM d") },
+          bookmark.rating && { text: "⭐".repeat(bookmark.rating) },
+          bookmark.tags.length > 0 && {
+            tag: {
+              value: `${bookmark.tags.length} tags`,
+              color: Color.SecondaryText,
+            },
+          },
+        ].filter(Boolean) as any
+      }
       actions={
         <ActionPanel>
           <ActionPanel.Section>
@@ -217,10 +240,7 @@ function BookmarkItem({
               title="Copy arXiv ID"
               content={paper.arxivId}
             />
-            <Action.CopyToClipboard
-              title="Copy Title"
-              content={paper.title}
-            />
+            <Action.CopyToClipboard title="Copy Title" content={paper.title} />
             <Action.CopyToClipboard
               title="Copy Abstract"
               content={paper.abstract}
@@ -233,13 +253,14 @@ function BookmarkItem({
 }
 
 function getCategoryColor(category: string): Color {
-  if (category.startsWith('cs.')) return Color.Blue;
-  if (category.startsWith('math.')) return Color.Green;
-  if (category.startsWith('physics.') || category.includes('-ph')) return Color.Orange;
-  if (category.startsWith('q-bio.')) return Color.Purple;
-  if (category.startsWith('q-fin.')) return Color.Yellow;
-  if (category.startsWith('stat.')) return Color.Red;
-  if (category.startsWith('econ.')) return Color.Magenta;
-  if (category.startsWith('eess.')) return Color.PrimaryText;
+  if (category.startsWith("cs.")) return Color.Blue;
+  if (category.startsWith("math.")) return Color.Green;
+  if (category.startsWith("physics.") || category.includes("-ph"))
+    return Color.Orange;
+  if (category.startsWith("q-bio.")) return Color.Purple;
+  if (category.startsWith("q-fin.")) return Color.Yellow;
+  if (category.startsWith("stat.")) return Color.Red;
+  if (category.startsWith("econ.")) return Color.Magenta;
+  if (category.startsWith("eess.")) return Color.PrimaryText;
   return Color.SecondaryText;
 }

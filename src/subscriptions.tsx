@@ -28,12 +28,15 @@ export default function SubscriptionsCommand() {
 
   async function loadSubscriptions() {
     try {
-      const subsStr = await LocalStorage.getItem<string>('subscriptions');
+      const subsStr = await LocalStorage.getItem<string>("subscriptions");
       if (subsStr) {
         setSubscriptions(JSON.parse(subsStr));
       }
     } catch (error) {
-      showToast({ style: Toast.Style.Failure, title: "Failed to load subscriptions" });
+      showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to load subscriptions",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -50,50 +53,54 @@ export default function SubscriptionsCommand() {
     });
 
     if (confirmed) {
-      const filtered = subscriptions.filter(s => s.id !== id);
+      const filtered = subscriptions.filter((s) => s.id !== id);
       setSubscriptions(filtered);
-      await LocalStorage.setItem('subscriptions', JSON.stringify(filtered));
+      await LocalStorage.setItem("subscriptions", JSON.stringify(filtered));
       showToast({ style: Toast.Style.Success, title: "Subscription removed" });
     }
   }
 
-  async function addSubscription(sub: Omit<Subscription, 'id' | 'createdAt' | 'lastChecked'>) {
+  async function addSubscription(
+    sub: Omit<Subscription, "id" | "createdAt" | "lastChecked">,
+  ) {
     const isDuplicate = subscriptions.some(
-      s => s.type === sub.type && s.value.toLowerCase() === sub.value.toLowerCase()
+      (s) =>
+        s.type === sub.type &&
+        s.value.toLowerCase() === sub.value.toLowerCase(),
     );
-    
+
     if (isDuplicate) {
-      showToast({ 
-        style: Toast.Style.Failure, 
+      showToast({
+        style: Toast.Style.Failure,
         title: "Subscription already exists",
-        message: `You're already subscribed to ${sub.type}: ${sub.value}`
+        message: `You're already subscribed to ${sub.type}: ${sub.value}`,
       });
       return;
     }
-    
+
     const newSub: Subscription = {
       ...sub,
       id: Date.now().toString(),
       createdAt: new Date(),
       lastChecked: new Date(),
     };
-    
+
     const updated = [...subscriptions, newSub];
     setSubscriptions(updated);
-    await LocalStorage.setItem('subscriptions', JSON.stringify(updated));
+    await LocalStorage.setItem("subscriptions", JSON.stringify(updated));
     showToast({ style: Toast.Style.Success, title: "Subscription added" });
   }
 
-  const categorySubs = subscriptions.filter(s => s.type === 'category');
-  const authorSubs = subscriptions.filter(s => s.type === 'author');
-  const keywordSubs = subscriptions.filter(s => s.type === 'keyword');
+  const categorySubs = subscriptions.filter((s) => s.type === "category");
+  const authorSubs = subscriptions.filter((s) => s.type === "author");
+  const keywordSubs = subscriptions.filter((s) => s.type === "keyword");
 
   const popularCategories = [
-    { code: 'cs.AI', name: 'Artificial Intelligence' },
-    { code: 'cs.LG', name: 'Machine Learning' },
-    { code: 'cs.CV', name: 'Computer Vision' },
-    { code: 'cs.CL', name: 'Computation and Language' },
-    { code: 'stat.ML', name: 'Machine Learning (Statistics)' },
+    { code: "cs.AI", name: "Artificial Intelligence" },
+    { code: "cs.LG", name: "Machine Learning" },
+    { code: "cs.CV", name: "Computer Vision" },
+    { code: "cs.CL", name: "Computation and Language" },
+    { code: "stat.ML", name: "Machine Learning (Statistics)" },
   ];
 
   return (
@@ -111,28 +118,37 @@ export default function SubscriptionsCommand() {
             <ActionPanel>
               <Action.Push
                 title="Add Custom Subscription"
-                target={<AddSubscriptionForm onAdd={addSubscription} existingSubs={subscriptions} />}
+                target={
+                  <AddSubscriptionForm
+                    onAdd={addSubscription}
+                    existingSubs={subscriptions}
+                  />
+                }
                 icon={Icon.Plus}
               />
               <ActionPanel.Section title="Quick Add Popular Categories">
-                {popularCategories.map(cat => (
+                {popularCategories.map((cat) => (
                   <Action
                     key={cat.code}
                     title={`Add ${cat.name}`}
                     icon={Icon.Tag}
                     onAction={() => {
-                      if (!subscriptions.some(s => s.type === 'category' && s.value === cat.code)) {
+                      if (
+                        !subscriptions.some(
+                          (s) => s.type === "category" && s.value === cat.code,
+                        )
+                      ) {
                         addSubscription({
-                          type: 'category',
+                          type: "category",
                           value: cat.code,
                           name: cat.name,
-                          color: Color.Blue
+                          color: Color.Blue,
                         });
                       } else {
                         showToast({
                           style: Toast.Style.Failure,
                           title: "Already subscribed",
-                          message: `You're already subscribed to ${cat.name}`
+                          message: `You're already subscribed to ${cat.name}`,
                         });
                       }
                     }}
@@ -143,61 +159,115 @@ export default function SubscriptionsCommand() {
           }
         />
       </List.Section>
-      
+
       {categorySubs.length > 0 && (
-        <List.Section title="Category Subscriptions" subtitle={`${categorySubs.length} categories`}>
+        <List.Section
+          title="Category Subscriptions"
+          subtitle={`${categorySubs.length} categories`}
+        >
           {categorySubs.map((sub) => (
             <SubscriptionItem
               key={sub.id}
               subscription={sub}
               onRemove={() => removeSubscription(sub.id)}
-              onEdit={() => push(<EditSubscriptionForm subscription={sub} onSave={async (updated) => {
-                const newSubs = subscriptions.map(s => s.id === sub.id ? { ...s, ...updated } : s);
-                setSubscriptions(newSubs);
-                await LocalStorage.setItem('subscriptions', JSON.stringify(newSubs));
-                showToast({ style: Toast.Style.Success, title: "Subscription updated" });
-              }} />)}
+              onEdit={() =>
+                push(
+                  <EditSubscriptionForm
+                    subscription={sub}
+                    onSave={async (updated) => {
+                      const newSubs = subscriptions.map((s) =>
+                        s.id === sub.id ? { ...s, ...updated } : s,
+                      );
+                      setSubscriptions(newSubs);
+                      await LocalStorage.setItem(
+                        "subscriptions",
+                        JSON.stringify(newSubs),
+                      );
+                      showToast({
+                        style: Toast.Style.Success,
+                        title: "Subscription updated",
+                      });
+                    }}
+                  />,
+                )
+              }
             />
           ))}
         </List.Section>
       )}
-      
+
       {authorSubs.length > 0 && (
-        <List.Section title="Author Subscriptions" subtitle={`${authorSubs.length} authors`}>
+        <List.Section
+          title="Author Subscriptions"
+          subtitle={`${authorSubs.length} authors`}
+        >
           {authorSubs.map((sub) => (
             <SubscriptionItem
               key={sub.id}
               subscription={sub}
               onRemove={() => removeSubscription(sub.id)}
-              onEdit={() => push(<EditSubscriptionForm subscription={sub} onSave={async (updated) => {
-                const newSubs = subscriptions.map(s => s.id === sub.id ? { ...s, ...updated } : s);
-                setSubscriptions(newSubs);
-                await LocalStorage.setItem('subscriptions', JSON.stringify(newSubs));
-                showToast({ style: Toast.Style.Success, title: "Subscription updated" });
-              }} />)}
+              onEdit={() =>
+                push(
+                  <EditSubscriptionForm
+                    subscription={sub}
+                    onSave={async (updated) => {
+                      const newSubs = subscriptions.map((s) =>
+                        s.id === sub.id ? { ...s, ...updated } : s,
+                      );
+                      setSubscriptions(newSubs);
+                      await LocalStorage.setItem(
+                        "subscriptions",
+                        JSON.stringify(newSubs),
+                      );
+                      showToast({
+                        style: Toast.Style.Success,
+                        title: "Subscription updated",
+                      });
+                    }}
+                  />,
+                )
+              }
             />
           ))}
         </List.Section>
       )}
-      
+
       {keywordSubs.length > 0 && (
-        <List.Section title="Keyword Subscriptions" subtitle={`${keywordSubs.length} keywords`}>
+        <List.Section
+          title="Keyword Subscriptions"
+          subtitle={`${keywordSubs.length} keywords`}
+        >
           {keywordSubs.map((sub) => (
             <SubscriptionItem
               key={sub.id}
               subscription={sub}
               onRemove={() => removeSubscription(sub.id)}
-              onEdit={() => push(<EditSubscriptionForm subscription={sub} onSave={async (updated) => {
-                const newSubs = subscriptions.map(s => s.id === sub.id ? { ...s, ...updated } : s);
-                setSubscriptions(newSubs);
-                await LocalStorage.setItem('subscriptions', JSON.stringify(newSubs));
-                showToast({ style: Toast.Style.Success, title: "Subscription updated" });
-              }} />)}
+              onEdit={() =>
+                push(
+                  <EditSubscriptionForm
+                    subscription={sub}
+                    onSave={async (updated) => {
+                      const newSubs = subscriptions.map((s) =>
+                        s.id === sub.id ? { ...s, ...updated } : s,
+                      );
+                      setSubscriptions(newSubs);
+                      await LocalStorage.setItem(
+                        "subscriptions",
+                        JSON.stringify(newSubs),
+                      );
+                      showToast({
+                        style: Toast.Style.Success,
+                        title: "Subscription updated",
+                      });
+                    }}
+                  />,
+                )
+              }
             />
           ))}
         </List.Section>
       )}
-      
+
       {subscriptions.length === 0 && !isLoading && (
         <List.EmptyView
           title="No subscriptions yet"
@@ -212,30 +282,39 @@ export default function SubscriptionsCommand() {
 function SubscriptionItem({
   subscription,
   onRemove,
-  onEdit
+  onEdit,
 }: {
   subscription: Subscription;
   onRemove: () => void;
   onEdit: () => void;
 }) {
-  const icon = subscription.type === 'category' ? Icon.Tag : 
-               subscription.type === 'author' ? Icon.Person : 
-               Icon.MagnifyingGlass;
-  
-  const color = subscription.color ? subscription.color as Color : 
-                subscription.type === 'category' ? Color.Blue :
-                subscription.type === 'author' ? Color.Green :
-                Color.Orange;
-  
+  const icon =
+    subscription.type === "category"
+      ? Icon.Tag
+      : subscription.type === "author"
+        ? Icon.Person
+        : Icon.MagnifyingGlass;
+
+  const color = subscription.color
+    ? (subscription.color as Color)
+    : subscription.type === "category"
+      ? Color.Blue
+      : subscription.type === "author"
+        ? Color.Green
+        : Color.Orange;
+
   const lastCheckedDate = new Date(subscription.lastChecked);
-  
+
   return (
     <List.Item
       title={subscription.name}
       subtitle={subscription.value}
       icon={{ source: icon, tintColor: color }}
       accessories={[
-        { text: format(lastCheckedDate, 'MMM d, HH:mm'), tooltip: "Last checked" },
+        {
+          text: format(lastCheckedDate, "MMM d, HH:mm"),
+          tooltip: "Last checked",
+        },
       ]}
       actions={
         <ActionPanel>
@@ -271,17 +350,19 @@ function AddSubscriptionForm({
   onAdd,
   existingSubs,
   presetType,
-  presetValue
+  presetValue,
 }: {
-  onAdd: (sub: Omit<Subscription, 'id' | 'createdAt' | 'lastChecked'>) => void;
+  onAdd: (sub: Omit<Subscription, "id" | "createdAt" | "lastChecked">) => void;
   existingSubs: Subscription[];
-  presetType?: 'category' | 'author' | 'keyword';
+  presetType?: "category" | "author" | "keyword";
   presetValue?: string;
 }) {
   const { pop } = useNavigation();
-  const [type, setType] = useState<'category' | 'author' | 'keyword'>(presetType || 'category');
+  const [type, setType] = useState<"category" | "author" | "keyword">(
+    presetType || "category",
+  );
   const [nameFieldValue, setNameFieldValue] = useState("");
-  
+
   return (
     <Form
       navigationTitle="Add Subscription"
@@ -291,17 +372,17 @@ function AddSubscriptionForm({
             title="Add Subscription"
             onSubmit={(values) => {
               if (!values.value) {
-                showToast({ 
-                  style: Toast.Style.Failure, 
+                showToast({
+                  style: Toast.Style.Failure,
                   title: "Missing value",
-                  message: "Please select or enter a value"
+                  message: "Please select or enter a value",
                 });
                 return;
               }
-              
+
               let displayName = values.name || "";
-              
-              if (type === 'category' && !displayName) {
+
+              if (type === "category" && !displayName) {
                 const category = Object.entries(ARXIV_CATEGORIES)
                   .flatMap(([_, cats]) => Object.entries(cats))
                   .find(([code, _]) => code === values.value);
@@ -309,16 +390,18 @@ function AddSubscriptionForm({
               } else if (!displayName) {
                 displayName = values.value;
               }
-              
+
               onAdd({
                 type: values.type,
                 value: values.value,
                 name: displayName,
-                color: values.color || (
-                  type === 'category' ? Color.Blue :
-                  type === 'author' ? Color.Green :
-                  Color.Orange
-                )
+                color:
+                  values.color ||
+                  (type === "category"
+                    ? Color.Blue
+                    : type === "author"
+                      ? Color.Green
+                      : Color.Orange),
               });
               pop();
             }}
@@ -332,11 +415,11 @@ function AddSubscriptionForm({
       }
     >
       <Form.Description text="Subscribe to categories, authors, or keywords to get notified about new papers" />
-      
-      <Form.Dropdown 
-        id="type" 
-        title="Type" 
-        value={type} 
+
+      <Form.Dropdown
+        id="type"
+        title="Type"
+        value={type}
         onChange={(newType) => {
           setType(newType as any);
           setNameFieldValue("");
@@ -344,12 +427,16 @@ function AddSubscriptionForm({
       >
         <Form.Dropdown.Item value="category" title="Category" icon={Icon.Tag} />
         <Form.Dropdown.Item value="author" title="Author" icon={Icon.Person} />
-        <Form.Dropdown.Item value="keyword" title="Keyword" icon={Icon.MagnifyingGlass} />
+        <Form.Dropdown.Item
+          value="keyword"
+          title="Keyword"
+          icon={Icon.MagnifyingGlass}
+        />
       </Form.Dropdown>
-      
-      {type === 'category' ? (
-        <Form.Dropdown 
-          id="value" 
+
+      {type === "category" ? (
+        <Form.Dropdown
+          id="value"
           title="Category"
           defaultValue={presetValue}
           storeValue
@@ -358,12 +445,14 @@ function AddSubscriptionForm({
           {Object.entries(ARXIV_CATEGORIES).map(([group, categories]) => (
             <Form.Dropdown.Section key={group} title={group}>
               {Object.entries(categories).map(([code, name]) => {
-                const isSubscribed = existingSubs.some(s => s.type === 'category' && s.value === code);
+                const isSubscribed = existingSubs.some(
+                  (s) => s.type === "category" && s.value === code,
+                );
                 return (
-                  <Form.Dropdown.Item 
-                    key={code} 
-                    value={code} 
-                    title={`${name} (${code})${isSubscribed ? ' ✓' : ''}`}
+                  <Form.Dropdown.Item
+                    key={code}
+                    value={code}
+                    title={`${name} (${code})${isSubscribed ? " ✓" : ""}`}
                   />
                 );
               })}
@@ -373,13 +462,21 @@ function AddSubscriptionForm({
       ) : (
         <Form.TextField
           id="value"
-          title={type === 'author' ? "Author Name" : "Keyword"}
-          placeholder={type === 'author' ? "e.g., Yann LeCun, Geoffrey Hinton" : "e.g., transformer, attention mechanism"}
+          title={type === "author" ? "Author Name" : "Keyword"}
+          placeholder={
+            type === "author"
+              ? "e.g., Yann LeCun, Geoffrey Hinton"
+              : "e.g., transformer, attention mechanism"
+          }
           defaultValue={presetValue}
-          info={type === 'author' ? "Enter the author's name as it appears in papers" : "Papers containing this keyword will appear in your feed"}
+          info={
+            type === "author"
+              ? "Enter the author's name as it appears in papers"
+              : "Papers containing this keyword will appear in your feed"
+          }
         />
       )}
-      
+
       <Form.TextField
         id="name"
         title="Display Name"
@@ -388,15 +485,43 @@ function AddSubscriptionForm({
         onChange={setNameFieldValue}
         info="Leave empty to use default name"
       />
-      
+
       <Form.Dropdown id="color" title="Color" defaultValue={Color.Blue}>
-        <Form.Dropdown.Item value={Color.Blue} title="Blue" icon={{ source: Icon.Circle, tintColor: Color.Blue }} />
-        <Form.Dropdown.Item value={Color.Green} title="Green" icon={{ source: Icon.Circle, tintColor: Color.Green }} />
-        <Form.Dropdown.Item value={Color.Orange} title="Orange" icon={{ source: Icon.Circle, tintColor: Color.Orange }} />
-        <Form.Dropdown.Item value={Color.Purple} title="Purple" icon={{ source: Icon.Circle, tintColor: Color.Purple }} />
-        <Form.Dropdown.Item value={Color.Red} title="Red" icon={{ source: Icon.Circle, tintColor: Color.Red }} />
-        <Form.Dropdown.Item value={Color.Yellow} title="Yellow" icon={{ source: Icon.Circle, tintColor: Color.Yellow }} />
-        <Form.Dropdown.Item value={Color.Magenta} title="Magenta" icon={{ source: Icon.Circle, tintColor: Color.Magenta }} />
+        <Form.Dropdown.Item
+          value={Color.Blue}
+          title="Blue"
+          icon={{ source: Icon.Circle, tintColor: Color.Blue }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Green}
+          title="Green"
+          icon={{ source: Icon.Circle, tintColor: Color.Green }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Orange}
+          title="Orange"
+          icon={{ source: Icon.Circle, tintColor: Color.Orange }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Purple}
+          title="Purple"
+          icon={{ source: Icon.Circle, tintColor: Color.Purple }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Red}
+          title="Red"
+          icon={{ source: Icon.Circle, tintColor: Color.Red }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Yellow}
+          title="Yellow"
+          icon={{ source: Icon.Circle, tintColor: Color.Yellow }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Magenta}
+          title="Magenta"
+          icon={{ source: Icon.Circle, tintColor: Color.Magenta }}
+        />
       </Form.Dropdown>
     </Form>
   );
@@ -404,13 +529,13 @@ function AddSubscriptionForm({
 
 function EditSubscriptionForm({
   subscription,
-  onSave
+  onSave,
 }: {
   subscription: Subscription;
   onSave: (updated: Partial<Subscription>) => void;
 }) {
   const { pop } = useNavigation();
-  
+
   return (
     <Form
       navigationTitle="Edit Subscription"
@@ -421,7 +546,7 @@ function EditSubscriptionForm({
             onSubmit={(values) => {
               onSave({
                 name: values.name || subscription.value,
-                color: values.color
+                color: values.color,
               });
               pop();
             }}
@@ -434,23 +559,57 @@ function EditSubscriptionForm({
         </ActionPanel>
       }
     >
-      <Form.Description text={`Editing ${subscription.type}: ${subscription.value}`} />
-      
+      <Form.Description
+        text={`Editing ${subscription.type}: ${subscription.value}`}
+      />
+
       <Form.TextField
         id="name"
         title="Display Name"
         defaultValue={subscription.name}
         placeholder="Custom name for this subscription"
       />
-      
-      <Form.Dropdown id="color" title="Color" defaultValue={subscription.color || Color.Blue}>
-        <Form.Dropdown.Item value={Color.Blue} title="Blue" icon={{ source: Icon.Circle, tintColor: Color.Blue }} />
-        <Form.Dropdown.Item value={Color.Green} title="Green" icon={{ source: Icon.Circle, tintColor: Color.Green }} />
-        <Form.Dropdown.Item value={Color.Orange} title="Orange" icon={{ source: Icon.Circle, tintColor: Color.Orange }} />
-        <Form.Dropdown.Item value={Color.Purple} title="Purple" icon={{ source: Icon.Circle, tintColor: Color.Purple }} />
-        <Form.Dropdown.Item value={Color.Red} title="Red" icon={{ source: Icon.Circle, tintColor: Color.Red }} />
-        <Form.Dropdown.Item value={Color.Yellow} title="Yellow" icon={{ source: Icon.Circle, tintColor: Color.Yellow }} />
-        <Form.Dropdown.Item value={Color.Magenta} title="Magenta" icon={{ source: Icon.Circle, tintColor: Color.Magenta }} />
+
+      <Form.Dropdown
+        id="color"
+        title="Color"
+        defaultValue={subscription.color || Color.Blue}
+      >
+        <Form.Dropdown.Item
+          value={Color.Blue}
+          title="Blue"
+          icon={{ source: Icon.Circle, tintColor: Color.Blue }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Green}
+          title="Green"
+          icon={{ source: Icon.Circle, tintColor: Color.Green }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Orange}
+          title="Orange"
+          icon={{ source: Icon.Circle, tintColor: Color.Orange }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Purple}
+          title="Purple"
+          icon={{ source: Icon.Circle, tintColor: Color.Purple }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Red}
+          title="Red"
+          icon={{ source: Icon.Circle, tintColor: Color.Red }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Yellow}
+          title="Yellow"
+          icon={{ source: Icon.Circle, tintColor: Color.Yellow }}
+        />
+        <Form.Dropdown.Item
+          value={Color.Magenta}
+          title="Magenta"
+          icon={{ source: Icon.Circle, tintColor: Color.Magenta }}
+        />
       </Form.Dropdown>
     </Form>
   );
