@@ -59,7 +59,8 @@ export default function SearchCommand() {
       };
       
       try {
-        const result = await searchArxiv(query, filter, 50);
+        const maxResults = filter.sortBy === 'citationCount' ? 100 : 30;
+        const result = await searchArxiv(query, filter, maxResults);
         history.resultsCount = result.totalResults;
         
         const historyKey = 'search-history';
@@ -68,30 +69,38 @@ export default function SearchCommand() {
         historyArray.unshift(history);
         await LocalStorage.setItem(historyKey, JSON.stringify(historyArray.slice(0, 100)));
         
-        const arxivIds = result.papers.map(p => p.arxivId);
-        const citations = await getBatchCitations(arxivIds);
+        let papersWithMetadata = result.papers;
         
-        const papersWithCitations = await Promise.all(result.papers.map(async (paper) => {
-          const citationCount = citations.get(paper.arxivId);
+        if (filter.sortBy === 'citationCount') {
+          showToast({ style: Toast.Style.Animated, title: "Loading citations..." });
+          const arxivIds = result.papers.map(p => p.arxivId);
+          const citations = await getBatchCitations(arxivIds);
+          
+          papersWithMetadata = result.papers.map(paper => ({
+            ...paper,
+            citationCount: citations.get(paper.arxivId) || 0
+          }));
+          
+          papersWithMetadata.sort((a, b) => {
+            const aCount = a.citationCount || 0;
+            const bCount = b.citationCount || 0;
+            return bCount - aCount;
+          });
+          
+          papersWithMetadata = papersWithMetadata.slice(0, 30);
+        }
+        
+        papersWithMetadata = await Promise.all(papersWithMetadata.map(async (paper) => {
           const status = await getReadingStatus(paper.id);
           const downloaded = await isDownloaded(paper.id);
           return {
             ...paper,
-            citationCount,
             readingStatus: status,
             isDownloaded: downloaded
           };
         }));
         
-        if (filter.sortBy === 'citationCount') {
-          papersWithCitations.sort((a, b) => {
-            const aCount = a.citationCount || 0;
-            const bCount = b.citationCount || 0;
-            return filter.sortOrder === 'ascending' ? aCount - bCount : bCount - aCount;
-          });
-        }
-        
-        return { papers: papersWithCitations, totalResults: result.totalResults };
+        return { papers: papersWithMetadata, totalResults: result.totalResults };
       } catch (error) {
         showToast({ style: Toast.Style.Failure, title: "Search failed", message: String(error) });
         return { papers: [], totalResults: 0 };
@@ -203,24 +212,28 @@ function PaperListItem({
   }
   
   const categoryColor = getCategoryColor(paper.primaryCategory);
-  const formattedDate = format(paper.published, 'MMM d, yyyy');
+  const year = paper.published.getFullYear();
+  const authorsStr = paper.authors.slice(0, 2).join(', ') + (paper.authors.length > 2 ? ' et al.' : '');
   
-  const accessories = [
-    paper.citationCount !== undefined && paper.citationCount > 0 && 
-      { text: `${paper.citationCount} cit`, tooltip: `${paper.citationCount} citations` },
-    { tag: { value: paper.primaryCategory, color: categoryColor } },
-    { text: formattedDate },
-    paper.isDownloaded && { icon: Icon.Download, tooltip: "Downloaded" },
-    paper.readingStatus === 'reading' && { icon: Icon.Eye, tooltip: "Reading" },
-    paper.readingStatus === 'read' && { icon: Icon.Checkmark, tooltip: "Read" },
-    isBookmarked && { icon: Icon.Bookmark, tooltip: "Bookmarked" }
-  ].filter(Boolean) as any;
+  const accessories = [];
+  
+  if (paper.citationCount !== undefined && paper.citationCount > 0) {
+    accessories.push({ text: `${paper.citationCount}`, tooltip: `${paper.citationCount} citations` });
+  }
+  
+  accessories.push({ tag: { value: paper.primaryCategory, color: categoryColor } });
+  
+  if (paper.isDownloaded) {
+    accessories.push({ icon: Icon.Checkmark, tooltip: "Downloaded" });
+  } else if (paper.readingStatus === 'read') {
+    accessories.push({ icon: Icon.CheckCircle, tooltip: "Read" });
+  }
   
   return (
     <List.Item
       id={paper.id}
       title={paper.title}
-      subtitle={paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ' et al.' : '')}
+      subtitle={`${authorsStr} • ${year}`}
       accessories={accessories}
       detail={
         isShowingDetail && (
