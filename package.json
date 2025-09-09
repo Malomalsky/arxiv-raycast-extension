@@ -3,7 +3,7 @@
   "name": "arxiv-pro",
   "title": "arXiv Pro",
   "description": "Advanced arXiv search with smart filters, bookmarks, and topic subscriptions",
-  "icon": "assets/command-icon.png",
+  "icon": "assets/icon.png",
   "author": "ivan",
   "categories": [
     "Productivity",
