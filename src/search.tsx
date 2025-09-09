@@ -90,15 +90,7 @@ export default function SearchCommand() {
           papersWithMetadata = papersWithMetadata.slice(0, 30);
         }
         
-        papersWithMetadata = await Promise.all(papersWithMetadata.map(async (paper) => {
-          const status = await getReadingStatus(paper.id);
-          const downloaded = await isDownloaded(paper.id);
-          return {
-            ...paper,
-            readingStatus: status,
-            isDownloaded: downloaded
-          };
-        }));
+        // Skip reading status check for performance
         
         return { papers: papersWithMetadata, totalResults: result.totalResults };
       } catch (error) {

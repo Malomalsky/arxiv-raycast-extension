@@ -71,29 +71,38 @@ export async function searchArxiv(
 }
 
 function parseArxivEntry(entry: any): ArxivPaper {
+  if (!entry || !entry.id || !entry.id[0]) {
+    throw new Error('Invalid entry: missing id');
+  }
+  
   const id = entry.id[0];
   const idParts = id.split('/');
   const arxivId = id.split('/abs/')[1] || idParts[idParts.length - 1];
   
-  const authors = entry.author?.map((a: any) => a.name[0]) || [];
-  const categories = entry.category?.map((c: any) => c.$.term) || [];
+  const authors = entry.author?.map((a: any) => a.name?.[0] || 'Unknown').filter(Boolean) || [];
+  const categories = entry.category?.map((c: any) => c?.$ ?.term).filter(Boolean) || [];
   
   const links = entry.link || [];
-  const pdfLink = links.find((l: any) => l.$.type === 'application/pdf');
-  const arxivLink = links.find((l: any) => l.$.type === 'text/html');
+  const pdfLink = links.find((l: any) => l?.$ ?.type === 'application/pdf');
+  const arxivLink = links.find((l: any) => l?.$ ?.type === 'text/html');
+  
+  const title = entry.title?.[0] || 'Untitled';
+  const summary = entry.summary?.[0] || '';
+  const published = entry.published?.[0] ? new Date(entry.published[0]) : new Date();
+  const updated = entry.updated?.[0] ? new Date(entry.updated[0]) : new Date();
   
   return {
     id: arxivId,
     arxivId: arxivId,
-    title: cleanText(entry.title[0]),
+    title: cleanText(title),
     authors,
-    abstract: cleanText(entry.summary[0]),
+    abstract: cleanText(summary),
     categories,
-    primaryCategory: entry['arxiv:primary_category']?.[0]?.$.term || categories[0] || '',
-    published: new Date(entry.published[0]),
-    updated: new Date(entry.updated[0]),
-    pdfUrl: pdfLink?.$.href || `https://arxiv.org/pdf/${arxivId}.pdf`,
-    arxivUrl: arxivLink?.$.href || `https://arxiv.org/abs/${arxivId}`,
+    primaryCategory: entry['arxiv:primary_category']?.[0]?.$ ?.term || categories[0] || '',
+    published,
+    updated,
+    pdfUrl: pdfLink?.$ ?.href || `https://arxiv.org/pdf/${arxivId}.pdf`,
+    arxivUrl: arxivLink?.$ ?.href || `https://arxiv.org/abs/${arxivId}`,
     comment: entry['arxiv:comment']?.[0] || undefined,
     journalRef: entry['arxiv:journal_ref']?.[0] || undefined,
     doi: entry['arxiv:doi']?.[0] || undefined
