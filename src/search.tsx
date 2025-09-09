@@ -11,7 +11,7 @@ import {
   Detail,
   Color,
 } from "@raycast/api";
-import { useCachedPromise, useDebounce } from "@raycast/utils";
+import { useCachedPromise } from "@raycast/utils";
 import { searchArxiv, buildSmartQuery, generateBibTeX } from "./api/arxiv";
 import { ArxivPaper, SearchFilter, SearchHistory, ARXIV_CATEGORIES } from "./types";
 import { format } from "date-fns";
@@ -30,7 +30,6 @@ export default function SearchCommand() {
     dateRange: 'month'
   });
   const [isShowingDetail, setIsShowingDetail] = useState(false);
-  const debouncedSearchText = useDebounce(searchText, 500);
   
   const preferences = getPreferenceValues<Preferences>();
 
@@ -73,7 +72,7 @@ export default function SearchCommand() {
         return { papers: [], totalResults: 0 };
       }
     },
-    [debouncedSearchText, filter],
+    [searchText, filter],
     {
       keepPreviousData: true,
     }
