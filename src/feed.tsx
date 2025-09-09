@@ -16,7 +16,6 @@ import { format, isToday, isYesterday, differenceInDays } from "date-fns";
 
 export default function FeedCommand() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
   useEffect(() => {
     loadSubscriptions();
@@ -28,10 +27,6 @@ export default function FeedCommand() {
       if (subsStr) {
         const subs = JSON.parse(subsStr);
         setSubscriptions(subs);
-        const categories = subs
-          .filter((s: Subscription) => s.type === 'category')
-          .map((s: Subscription) => s.value);
-        setSelectedCategories(categories);
       }
     } catch (error) {
       showToast({ style: Toast.Style.Failure, title: "Failed to load subscriptions" });
@@ -39,26 +34,56 @@ export default function FeedCommand() {
   }
 
   const { data: papers, isLoading } = useCachedPromise(
-    async (categories: string[]) => {
-      if (categories.length === 0) return [];
+    async (subs: Subscription[]) => {
+      if (!subs || subs.length === 0) return [];
       
       try {
-        const papers = await getRecentPapers(categories, 100);
+        const allPapers: ArxivPaper[] = [];
+        
+        const categories = subs.filter(s => s.type === 'category').map(s => s.value);
+        if (categories.length > 0) {
+          const categoryPapers = await getRecentPapers(categories, 50);
+          allPapers.push(...categoryPapers);
+        }
+        
+        const authors = subs.filter(s => s.type === 'author');
+        for (const author of authors) {
+          const { searchArxiv } = await import('./api/arxiv');
+          const result = await searchArxiv(`au:"${author.value}"`, {
+            sortBy: 'submittedDate',
+            sortOrder: 'descending'
+          }, 20);
+          allPapers.push(...result.papers);
+        }
+        
+        const keywords = subs.filter(s => s.type === 'keyword');
+        for (const keyword of keywords) {
+          const { searchArxiv } = await import('./api/arxiv');
+          const result = await searchArxiv(`all:"${keyword.value}"`, {
+            sortBy: 'submittedDate',
+            sortOrder: 'descending'
+          }, 20);
+          allPapers.push(...result.papers);
+        }
+        
+        const uniquePapers = Array.from(
+          new Map(allPapers.map(p => [p.id, p])).values()
+        ).sort((a, b) => b.published.getTime() - a.published.getTime());
         
         await LocalStorage.setItem('subscriptions', JSON.stringify(
-          subscriptions.map(s => ({
+          subs.map(s => ({
             ...s,
             lastChecked: new Date()
           }))
         ));
         
-        return papers;
+        return uniquePapers;
       } catch (error) {
         showToast({ style: Toast.Style.Failure, title: "Failed to load feed" });
         return [];
       }
     },
-    [selectedCategories],
+    [subscriptions],
     {
       keepPreviousData: true,
     }
@@ -89,7 +114,7 @@ export default function FeedCommand() {
     }
   }
 
-  if (selectedCategories.length === 0) {
+  if (subscriptions.length === 0) {
     return (
       <List>
         <List.EmptyView
@@ -121,6 +146,7 @@ export default function FeedCommand() {
             <FeedItem
               key={paper.id}
               paper={paper}
+              subscriptions={subscriptions}
               onBookmark={() => toggleBookmark(paper)}
             />
           ))}
@@ -140,9 +166,11 @@ export default function FeedCommand() {
 
 function FeedItem({
   paper,
+  subscriptions,
   onBookmark
 }: {
   paper: ArxivPaper;
+  subscriptions: Subscription[];
   onBookmark: () => void;
 }) {
   const categoryColor = getCategoryColor(paper.primaryCategory);
@@ -154,7 +182,7 @@ function FeedItem({
       subtitle={paper.authors.slice(0, 2).join(', ') + (paper.authors.length > 2 ? ' et al.' : '')}
       accessories={[
         { tag: { value: paper.primaryCategory, color: categoryColor } },
-        { text: timeAgo }
+        { text: format(paper.published, 'MMM d, yyyy'), tooltip: timeAgo }
       ]}
       actions={
         <ActionPanel>
