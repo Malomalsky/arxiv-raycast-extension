@@ -22,8 +22,8 @@ declare namespace Preferences {
   export type Search = ExtensionPreferences & {}
   /** Preferences accessible in the `bookmarks` command */
   export type Bookmarks = ExtensionPreferences & {}
-  /** Preferences accessible in the `feed` command */
-  export type Feed = ExtensionPreferences & {}
+  /** Preferences accessible in the `feedSelector` command */
+  export type FeedSelector = ExtensionPreferences & {}
   /** Preferences accessible in the `subscriptions` command */
   export type Subscriptions = ExtensionPreferences & {}
 }
@@ -33,8 +33,8 @@ declare namespace Arguments {
   export type Search = {}
   /** Arguments passed to the `bookmarks` command */
   export type Bookmarks = {}
-  /** Arguments passed to the `feed` command */
-  export type Feed = {}
+  /** Arguments passed to the `feedSelector` command */
+  export type FeedSelector = {}
   /** Arguments passed to the `subscriptions` command */
   export type Subscriptions = {}
 }
