@@ -1,98 +1,75 @@
-import fetch from "node-fetch";
 import { LocalStorage } from "@raycast/api";
 
-const SEMANTIC_SCHOLAR_API = "https://api.semanticscholar.org/graph/v1";
+const API = "https://api.semanticscholar.org/graph/v1";
 const CACHE_KEY = "citation-cache";
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-
-interface S2Paper {
-  paperId: string;
-  title: string;
-  citationCount: number;
-  influentialCitationCount: number;
-  year: number;
-  authors: { name: string }[];
-}
-
-export async function getCitationCount(
-  arxivId: string,
-): Promise<number | null> {
-  try {
-    const response = await fetch(
-      `${SEMANTIC_SCHOLAR_API}/paper/arXiv:${arxivId}?fields=citationCount`,
-    );
-
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as { citationCount: number };
-    return data.citationCount || 0;
-  } catch (error) {
-    console.error("Failed to fetch citations:", error);
-    return null;
-  }
-}
+const CACHE_DURATION = 24 * 60 * 60 * 1000;
+type CitationCache = Record<string, { count: number; timestamp: number }>;
 
 export async function getBatchCitations(
   arxivIds: string[],
+  signal?: AbortSignal,
 ): Promise<Map<string, number>> {
+  signal?.throwIfAborted();
   const citations = new Map<string, number>();
-
+  const raw = await LocalStorage.getItem<string>(CACHE_KEY);
+  let cache: CitationCache = {};
   try {
-    const cacheStr = await LocalStorage.getItem<string>(CACHE_KEY);
-    const cache = cacheStr ? JSON.parse(cacheStr) : {};
-    const now = Date.now();
-
-    const toFetch: string[] = [];
-
-    for (const id of arxivIds) {
-      if (cache[id] && now - cache[id].timestamp < CACHE_DURATION) {
-        citations.set(id, cache[id].count);
-      } else {
-        toFetch.push(id);
-      }
-    }
-
-    if (toFetch.length > 0) {
-      const batchSize = 10;
-      for (let i = 0; i < toFetch.length; i += batchSize) {
-        const batch = toFetch.slice(i, i + batchSize);
-        const promises = batch.map(async (id) => {
-          const count = await getCitationCount(id);
-          if (count !== null) {
-            citations.set(id, count);
-            cache[id] = { count, timestamp: now };
-          }
-        });
-        await Promise.all(promises);
-
-        if (i + batchSize < toFetch.length) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-      }
-
-      await LocalStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-    }
-  } catch (error) {
-    console.error("Failed to fetch batch citations:", error);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+      cache = parsed;
+  } catch {
+    // Citation counts can be fetched again if their cache is damaged.
   }
-
+  const now = Date.now();
+  cache = Object.fromEntries(
+    Object.entries(cache).filter(
+      ([, item]) =>
+        item &&
+        Number.isInteger(item.count) &&
+        item.count >= 0 &&
+        Number.isFinite(item.timestamp) &&
+        now - item.timestamp < CACHE_DURATION,
+    ),
+  );
+  const missing = [...new Set(arxivIds)].filter((id) => {
+    const cached = cache[id] || cache[id.replace(/v\d+$/, "")];
+    if (!cached) return true;
+    citations.set(id, cached.count);
+    return false;
+  });
+  for (let index = 0; index < missing.length; index += 500) {
+    const batch = missing.slice(index, index + 500);
+    const response = await fetch(`${API}/paper/batch?fields=citationCount`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ids: batch.map((id) => `ARXIV:${id.replace(/v\d+$/, "")}`),
+      }),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(20_000)])
+        : AbortSignal.timeout(20_000),
+    });
+    if (!response.ok)
+      throw new Error(
+        response.status === 429
+          ? "Citation counts are rate limited. Choose another sort order or try again shortly."
+          : `Citation counts are unavailable (HTTP ${response.status}).`,
+      );
+    const data = (await response.json()) as ({
+      citationCount?: number;
+    } | null)[];
+    if (!Array.isArray(data) || data.length !== batch.length)
+      throw new Error("Semantic Scholar returned invalid citation data.");
+    data.forEach((paper, position) => {
+      const count = paper?.citationCount;
+      if (typeof count === "number" && Number.isInteger(count) && count >= 0) {
+        citations.set(batch[position], count);
+        cache[batch[position].replace(/v\d+$/, "")] = { count, timestamp: now };
+      }
+    });
+  }
+  signal?.throwIfAborted();
+  if (missing.length)
+    await LocalStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   return citations;
-}
-
-export async function getRelatedPapers(arxivId: string): Promise<S2Paper[]> {
-  try {
-    const response = await fetch(
-      `${SEMANTIC_SCHOLAR_API}/paper/arXiv:${arxivId}/references?fields=title,citationCount,year,authors&limit=20`,
-    );
-
-    if (!response.ok) return [];
-
-    const data = (await response.json()) as { data: { citedPaper: S2Paper }[] };
-    return data.data
-      .map((item) => item.citedPaper)
-      .filter((paper) => paper.title);
-  } catch (error) {
-    console.error("Failed to fetch related papers:", error);
-    return [];
-  }
 }

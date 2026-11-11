@@ -1,91 +1,58 @@
-import { LocalStorage } from "@raycast/api";
+import { readItems, updateItems } from "./storage";
 
 export type ReadingStatus = "new" | "reading" | "read";
 
-interface PaperStatus {
+export interface PaperStatus {
   paperId: string;
   status: ReadingStatus;
-  updatedAt: Date;
-  downloadedAt?: Date;
+  updatedAt: string;
+  downloadedAt?: string;
   notes?: string;
 }
 
 const STORAGE_KEY = "paper-reading-status";
 
-export async function getReadingStatus(
-  paperId: string,
-): Promise<ReadingStatus> {
-  try {
-    const data = await LocalStorage.getItem<string>(STORAGE_KEY);
-    if (!data) return "new";
-
-    const statuses: PaperStatus[] = JSON.parse(data);
-    const status = statuses.find((s) => s.paperId === paperId);
-    return status?.status || "new";
-  } catch {
-    return "new";
+export async function getPaperStatuses(): Promise<PaperStatus[]> {
+  const statuses = await readItems<PaperStatus>(STORAGE_KEY);
+  if (
+    statuses.some(
+      (item) =>
+        !item?.paperId || !["new", "reading", "read"].includes(item.status),
+    )
+  ) {
+    throw new Error(
+      "Some saved reading states are invalid. They have not been changed.",
+    );
   }
+  return statuses;
 }
 
-export async function setReadingStatus(
+export function setReadingStatus(
   paperId: string,
   status: ReadingStatus,
 ): Promise<void> {
-  try {
-    const data = await LocalStorage.getItem<string>(STORAGE_KEY);
-    const statuses: PaperStatus[] = data ? JSON.parse(data) : [];
+  return updateStatus(paperId, { status, updatedAt: new Date().toISOString() });
+}
 
-    const existingIndex = statuses.findIndex((s) => s.paperId === paperId);
-    const paperStatus: PaperStatus = {
+export function markAsDownloaded(paperId: string): Promise<void> {
+  return updateStatus(paperId, { downloadedAt: new Date().toISOString() });
+}
+
+function updateStatus(
+  paperId: string,
+  changes: Partial<PaperStatus>,
+): Promise<void> {
+  return updateItems<PaperStatus>(STORAGE_KEY, (statuses) => {
+    const existing = statuses.find((item) => item.paperId === paperId);
+    const updated: PaperStatus = {
       paperId,
-      status,
-      updatedAt: new Date(),
+      status: "new",
+      updatedAt: new Date().toISOString(),
+      ...existing,
+      ...changes,
     };
-
-    if (existingIndex >= 0) {
-      statuses[existingIndex] = { ...statuses[existingIndex], ...paperStatus };
-    } else {
-      statuses.push(paperStatus);
-    }
-
-    await LocalStorage.setItem(STORAGE_KEY, JSON.stringify(statuses));
-  } catch (error) {
-    console.error("Failed to save reading status:", error);
-  }
-}
-
-export async function markAsDownloaded(paperId: string): Promise<void> {
-  try {
-    const data = await LocalStorage.getItem<string>(STORAGE_KEY);
-    const statuses: PaperStatus[] = data ? JSON.parse(data) : [];
-
-    const existingIndex = statuses.findIndex((s) => s.paperId === paperId);
-    if (existingIndex >= 0) {
-      statuses[existingIndex].downloadedAt = new Date();
-    } else {
-      statuses.push({
-        paperId,
-        status: "new",
-        updatedAt: new Date(),
-        downloadedAt: new Date(),
-      });
-    }
-
-    await LocalStorage.setItem(STORAGE_KEY, JSON.stringify(statuses));
-  } catch (error) {
-    console.error("Failed to mark as downloaded:", error);
-  }
-}
-
-export async function isDownloaded(paperId: string): Promise<boolean> {
-  try {
-    const data = await LocalStorage.getItem<string>(STORAGE_KEY);
-    if (!data) return false;
-
-    const statuses: PaperStatus[] = JSON.parse(data);
-    const status = statuses.find((s) => s.paperId === paperId);
-    return !!status?.downloadedAt;
-  } catch {
-    return false;
-  }
+    return existing
+      ? statuses.map((item) => (item.paperId === paperId ? updated : item))
+      : [...statuses, updated];
+  });
 }

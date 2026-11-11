@@ -6,8 +6,8 @@ export interface ArxivPaper {
   abstract: string;
   categories: string[];
   primaryCategory: string;
-  published: Date;
-  updated: Date;
+  published: string;
+  updated: string;
   pdfUrl: string;
   arxivUrl: string;
   comment?: string;
@@ -21,7 +21,7 @@ export interface ArxivPaper {
 export interface Bookmark {
   paperId: string;
   paper: ArxivPaper;
-  addedAt: Date;
+  addedAt: string;
   tags: string[];
   notes?: string;
   rating?: number;
@@ -32,8 +32,8 @@ export interface Subscription {
   type: "category" | "author" | "keyword";
   value: string;
   name: string;
-  createdAt: Date;
-  lastChecked: Date;
+  createdAt: string;
+  lastChecked: string;
   color?: string;
 }
 
@@ -41,15 +41,14 @@ export interface SearchFilter {
   sortBy: "relevance" | "submittedDate" | "lastUpdatedDate" | "citationCount";
   sortOrder: "ascending" | "descending";
   dateRange?: "today" | "week" | "month" | "year" | "all" | "custom";
-  customDateStart?: Date;
-  customDateEnd?: Date;
+  customDateStart?: string;
+  customDateEnd?: string;
   categories?: string[];
-  onlyBookmarked?: boolean;
 }
 
 export interface SearchHistory {
   query: string;
-  timestamp: Date;
+  timestamp: string;
   resultsCount: number;
 }
 

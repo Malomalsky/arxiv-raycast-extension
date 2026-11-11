@@ -1,9 +1,9 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "arxiv-pro",
-  "title": "arXiv Pro",
-  "description": "Advanced arXiv search with smart filters, bookmarks, and topic subscriptions",
-  "icon": "icon.png",
+  "title": "arXiv",
+  "description": "Search arXiv, save papers, and follow authors and topics",
+  "icon": "arxiv-icon.png",
   "author": "ivan",
   "categories": [
     "Productivity",
@@ -32,55 +32,56 @@
   "commands": [
     {
       "name": "search",
-      "title": "Search arXiv Papers",
-      "subtitle": "arXiv Pro",
-      "description": "Search papers with smart filters",
+      "title": "Search Papers",
+      "subtitle": "arXiv",
+      "description": "Search papers by title, author, category, and date",
       "mode": "view",
-      "icon": "icon.png"
+      "icon": "arxiv-icon.png"
     },
     {
       "name": "bookmarks",
-      "title": "View Bookmarks",
-      "subtitle": "arXiv Pro",
-      "description": "View and manage saved papers",
+      "title": "Bookmarks",
+      "subtitle": "arXiv",
+      "description": "Read, annotate, and export saved papers",
       "mode": "view",
-      "icon": "icon.png"
+      "icon": "arxiv-icon.png"
     },
     {
       "name": "feedSelector",
-      "title": "Topic Feed",
-      "subtitle": "arXiv Pro",
-      "description": "View papers from subscribed topics",
+      "title": "Browse Feeds",
+      "subtitle": "arXiv",
+      "description": "Browse recent papers from your subscriptions",
       "mode": "view",
-      "icon": "icon.png"
+      "icon": "arxiv-icon.png"
     },
     {
       "name": "subscriptions",
-      "title": "Manage Subscriptions",
-      "subtitle": "arXiv Pro",
-      "description": "Manage topic and author subscriptions",
+      "title": "Subscriptions",
+      "subtitle": "arXiv",
+      "description": "Follow categories, authors, and keywords",
       "mode": "view",
-      "icon": "icon.png"
+      "icon": "arxiv-icon.png"
     }
   ],
   "dependencies": {
     "@raycast/api": "^1.64.0",
     "@raycast/utils": "^1.10.1",
     "date-fns": "^3.0.0",
-    "node-fetch": "^3.3.2",
     "unicodeit": "^0.7.5",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.8",
-    "@types/node": "20.8.10",
-    "@types/react": "18.2.45",
+    "@types/node": "22.13.10",
+    "@types/react": "19.0.10",
     "@types/xml2js": "^0.4.14",
     "eslint": "^8.56.0",
     "prettier": "^3.1.1",
     "typescript": "^5.3.3"
   },
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit",
     "build": "ray build -e dist",
     "dev": "ray develop",
     "fix-lint": "ray lint --fix",

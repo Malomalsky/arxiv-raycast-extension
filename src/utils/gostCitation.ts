@@ -3,7 +3,7 @@ import { ArxivPaper } from "../types";
 export function generateGOSTCitation(paper: ArxivPaper): string {
   const authors = paper.authors.slice(0, 3);
   const hasMoreAuthors = paper.authors.length > 3;
-  const year = paper.published.getFullYear();
+  const year = new Date(paper.published).getFullYear();
   const accessDate = new Date().toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
@@ -37,7 +37,7 @@ export function generateGOSTCitation(paper: ArxivPaper): string {
 }
 
 function formatAuthorForHeader(fullName: string): string {
-  const parts = fullName.trim().split(" ");
+  const parts = fullName.trim().split(/\s+/);
   if (parts.length === 1) return parts[0];
 
   const lastName = parts[parts.length - 1];
@@ -50,7 +50,7 @@ function formatAuthorForHeader(fullName: string): string {
 }
 
 function formatAuthorForResponsibility(fullName: string): string {
-  const parts = fullName.trim().split(" ");
+  const parts = fullName.trim().split(/\s+/);
   if (parts.length === 1) return parts[0];
 
   const lastName = parts[parts.length - 1];
@@ -60,8 +60,4 @@ function formatAuthorForResponsibility(fullName: string): string {
     .join(" ");
 
   return `${initials} ${lastName}`;
-}
-
-export function generateGOSTBibliography(paper: ArxivPaper): string {
-  return generateGOSTCitation(paper);
 }

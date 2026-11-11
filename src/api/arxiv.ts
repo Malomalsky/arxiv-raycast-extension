@@ -1,237 +1,197 @@
-import fetch from "node-fetch";
 import { parseStringPromise } from "xml2js";
-import { format, subDays, subMonths, subYears } from "date-fns";
+import { startOfDay, subDays, subMonths, subYears } from "date-fns";
+import { setTimeout as delay } from "node:timers/promises";
 import { ArxivPaper, SearchFilter } from "../types";
 
-const ARXIV_API_BASE = "http://export.arxiv.org/api/query";
-const ARXIV_RSS_BASE = "http://rss.arxiv.org/rss";
-const REQUEST_DELAY = 3000; // 3 seconds between requests per API guidelines
-
+const ARXIV_API_BASE = "https://export.arxiv.org/api/query";
+const REQUEST_DELAY = 3000;
 let lastRequestTime = 0;
+let requestQueue = Promise.resolve();
 
-async function throttleRequest() {
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  if (timeSinceLastRequest < REQUEST_DELAY) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, REQUEST_DELAY - timeSinceLastRequest),
-    );
-  }
-  lastRequestTime = Date.now();
+async function throttleRequest(signal?: AbortSignal) {
+  const request = requestQueue.then(async () => {
+    signal?.throwIfAborted();
+    const wait = REQUEST_DELAY - (Date.now() - lastRequestTime);
+    if (wait > 0) await delay(wait, undefined, { signal });
+    signal?.throwIfAborted();
+    lastRequestTime = Date.now();
+  });
+  requestQueue = request.catch(() => undefined);
+  await request;
+}
+
+interface AtomEntry {
+  id?: string[];
+  title?: string[];
+  summary?: string[];
+  published?: string[];
+  updated?: string[];
+  author?: { name?: string[] }[];
+  category?: { $?: { term?: string } }[];
+  "arxiv:primary_category"?: { $?: { term?: string } }[];
+  "arxiv:comment"?: string[];
+  "arxiv:journal_ref"?: string[];
+  "arxiv:doi"?: string[];
 }
 
 export async function searchArxiv(
   query: string,
   filter?: SearchFilter,
-  maxResults: number = 20,
-  start: number = 0,
+  maxResults = 30,
+  start = 0,
+  signal?: AbortSignal,
 ): Promise<{ papers: ArxivPaper[]; totalResults: number }> {
-  await throttleRequest();
-
-  let searchQuery = query;
-
-  // Add date filter if specified
-  if (filter?.dateRange && filter.dateRange !== "all") {
-    const dateFilter = buildDateFilter(
-      filter.dateRange,
-      filter.customDateStart,
-      filter.customDateEnd,
+  await throttleRequest(signal);
+  const parts = query.trim() ? [`(${query.trim()})`] : [];
+  if (filter?.categories?.length) {
+    parts.push(
+      `(${filter.categories.map((category) => `cat:${category}`).join(" OR ")})`,
     );
-    if (dateFilter) {
-      searchQuery = searchQuery
-        ? `${searchQuery}+AND+${dateFilter}`
-        : dateFilter;
-    }
   }
-
-  // Add category filter if specified
-  if (filter?.categories && filter.categories.length > 0) {
-    const categoryFilter = filter.categories
-      .map((cat) => `cat:${cat}`)
-      .join("+OR+");
-    searchQuery = searchQuery
-      ? `${searchQuery}+AND+(${categoryFilter})`
-      : categoryFilter;
+  if (filter?.dateRange && filter.dateRange !== "all") {
+    const dateFilter = buildDateFilter(filter);
+    if (dateFilter) parts.push(dateFilter);
   }
-
   const params = new URLSearchParams({
-    search_query: searchQuery || "all:*",
-    start: start.toString(),
-    max_results: maxResults.toString(),
-    sortBy: filter?.sortBy || "relevance",
+    search_query: parts.join(" AND ") || "all:*",
+    start: String(start),
+    max_results: String(maxResults),
+    sortBy:
+      filter?.sortBy === "citationCount"
+        ? "relevance"
+        : filter?.sortBy || "relevance",
     sortOrder: filter?.sortOrder || "descending",
   });
-
-  const url = `${ARXIV_API_BASE}?${params}`;
-
-  try {
-    const response = await fetch(url);
-    const xmlText = await response.text();
-    const result = await parseStringPromise(xmlText);
-
-    const feed = result.feed;
-    const totalResults = parseInt(feed["opensearch:totalResults"]?.[0] || "0");
-    const entries = feed.entry || [];
-
-    const papers: ArxivPaper[] = entries.map(parseArxivEntry);
-
-    return { papers, totalResults };
-  } catch (error) {
-    console.error("Error searching arXiv:", error);
-    throw new Error("Failed to search arXiv papers");
+  const response = await fetch(`${ARXIV_API_BASE}?${params}`, {
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+      : AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 429
+        ? "arXiv is receiving too many requests. Try again shortly."
+        : `arXiv is unavailable (HTTP ${response.status}).`,
+    );
   }
+  const result = (await parseStringPromise(await response.text())) as {
+    feed?: { entry?: AtomEntry[]; "opensearch:totalResults"?: string[] };
+  };
+  if (!result.feed) throw new Error("arXiv returned an invalid response.");
+  const papers = (result.feed.entry || []).map(parseArxivEntry);
+  const totalResults = Number(
+    result.feed["opensearch:totalResults"]?.[0] ?? papers.length,
+  );
+  if (!Number.isFinite(totalResults))
+    throw new Error("arXiv returned an invalid result count.");
+  return { papers, totalResults };
 }
 
-function parseArxivEntry(entry: any): ArxivPaper {
-  if (!entry || !entry.id || !entry.id[0]) {
-    throw new Error("Invalid entry: missing id");
+function parseArxivEntry(entry: AtomEntry): ArxivPaper {
+  const sourceId = entry.id?.[0] || "";
+  if (sourceId.includes("/api/errors")) {
+    throw new Error(
+      cleanText(entry.summary?.[0] || "arXiv could not process this query."),
+    );
   }
-
-  const id = entry.id[0];
-  const idParts = id.split("/");
-  const arxivId = id.split("/abs/")[1] || idParts[idParts.length - 1];
-
-  const authors =
-    entry.author?.map((a: any) => a.name?.[0] || "Unknown").filter(Boolean) ||
-    [];
-  const categories =
-    entry.category?.map((c: any) => c?.$?.term).filter(Boolean) || [];
-
-  const links = entry.link || [];
-  const pdfLink = links.find((l: any) => l?.$?.type === "application/pdf");
-  const arxivLink = links.find((l: any) => l?.$?.type === "text/html");
-
-  const title = entry.title?.[0] || "Untitled";
-  const summary = entry.summary?.[0] || "";
-  const published = entry.published?.[0]
-    ? new Date(entry.published[0])
-    : new Date();
-  const updated = entry.updated?.[0] ? new Date(entry.updated[0]) : new Date();
-
+  const arxivId = sourceId.split("/abs/")[1];
+  const published = entry.published?.[0];
+  const updated = entry.updated?.[0] || published;
+  if (
+    !arxivId ||
+    !entry.title?.[0] ||
+    !published ||
+    !updated ||
+    !Number.isFinite(Date.parse(published)) ||
+    !Number.isFinite(Date.parse(updated))
+  ) {
+    throw new Error("arXiv returned an incomplete paper.");
+  }
+  const categories = (entry.category || []).flatMap((category) =>
+    category.$?.term ? [category.$.term] : [],
+  );
   return {
     id: arxivId,
-    arxivId: arxivId,
-    title: cleanText(title),
-    authors,
-    abstract: cleanText(summary),
+    arxivId,
+    title: cleanText(entry.title[0]),
+    authors: (entry.author || []).flatMap((author) =>
+      author.name?.[0] ? [cleanText(author.name[0])] : [],
+    ),
+    abstract: cleanText(entry.summary?.[0] || ""),
     categories,
     primaryCategory:
       entry["arxiv:primary_category"]?.[0]?.$?.term || categories[0] || "",
     published,
     updated,
-    pdfUrl: pdfLink?.$?.href || `https://arxiv.org/pdf/${arxivId}.pdf`,
-    arxivUrl: arxivLink?.$?.href || `https://arxiv.org/abs/${arxivId}`,
-    comment: entry["arxiv:comment"]?.[0] || undefined,
-    journalRef: entry["arxiv:journal_ref"]?.[0] || undefined,
-    doi: entry["arxiv:doi"]?.[0] || undefined,
+    pdfUrl: `https://arxiv.org/pdf/${arxivId}`,
+    arxivUrl: `https://arxiv.org/abs/${arxivId}`,
+    comment: entry["arxiv:comment"]?.[0],
+    journalRef: entry["arxiv:journal_ref"]?.[0],
+    doi: entry["arxiv:doi"]?.[0],
   };
 }
 
 function cleanText(text: string): string {
-  return text.replace(/\s+/g, " ").replace(/\n+/g, " ").trim();
+  return text.replace(/\s+/g, " ").trim();
 }
 
-function buildDateFilter(
-  dateRange: string,
-  customStart?: Date,
-  customEnd?: Date,
-): string {
-  let startDate: Date;
-  let endDate = new Date();
-
-  switch (dateRange) {
+function buildDateFilter(filter: SearchFilter): string {
+  const end =
+    filter.dateRange === "custom" && filter.customDateEnd
+      ? new Date(filter.customDateEnd)
+      : new Date();
+  let start: Date;
+  switch (filter.dateRange) {
     case "today":
-      startDate = new Date();
-      startDate.setHours(0, 0, 0, 0);
+      start = startOfDay(end);
       break;
     case "week":
-      startDate = subDays(endDate, 7);
+      start = subDays(end, 7);
       break;
     case "month":
-      startDate = subMonths(endDate, 1);
+      start = subMonths(end, 1);
       break;
     case "year":
-      startDate = subYears(endDate, 1);
+      start = subYears(end, 1);
       break;
     case "custom":
-      if (!customStart || !customEnd) return "";
-      startDate = customStart;
-      endDate = customEnd;
+      if (!filter.customDateStart || !filter.customDateEnd) return "";
+      start = new Date(filter.customDateStart);
       break;
     default:
       return "";
   }
-
-  const startStr = format(startDate, "yyyyMMdd") + "*";
-  const endStr = format(endDate, "yyyyMMdd") + "*";
-
-  return `submittedDate:[${startStr}+TO+${endStr}]`;
+  if (
+    !Number.isFinite(start.getTime()) ||
+    !Number.isFinite(end.getTime()) ||
+    start > end
+  ) {
+    throw new Error("Choose a valid date range.");
+  }
+  const timestamp = (date: Date) =>
+    date.toISOString().replace(/[-:T]/g, "").slice(0, 12);
+  return `submittedDate:[${timestamp(start)} TO ${timestamp(end)}]`;
 }
 
 export async function getRecentPapers(
   categories: string[],
-  maxResults: number = 20,
+  maxResults = 50,
+  signal?: AbortSignal,
 ): Promise<ArxivPaper[]> {
-  const filter: SearchFilter = {
-    sortBy: "submittedDate",
-    sortOrder: "descending",
-    categories,
-  };
-
-  const result = await searchArxiv("", filter, maxResults);
+  const result = await searchArxiv(
+    "",
+    { sortBy: "submittedDate", sortOrder: "descending", categories },
+    maxResults,
+    0,
+    signal,
+  );
   return result.papers;
-}
-
-export async function searchByAuthor(
-  authorName: string,
-  maxResults: number = 20,
-): Promise<ArxivPaper[]> {
-  const query = `au:"${authorName}"`;
-  const result = await searchArxiv(query, undefined, maxResults);
-  return result.papers;
-}
-
-export async function getPaperById(
-  arxivId: string,
-): Promise<ArxivPaper | null> {
-  const query = `id:${arxivId}`;
-  const result = await searchArxiv(query, undefined, 1);
-  return result.papers[0] || null;
-}
-
-export function buildSmartQuery(params: {
-  title?: string;
-  author?: string;
-  abstract?: string;
-  category?: string;
-  allFields?: string;
-}): string {
-  const parts: string[] = [];
-
-  if (params.title) {
-    parts.push(`ti:"${params.title}"`);
-  }
-  if (params.author) {
-    parts.push(`au:"${params.author}"`);
-  }
-  if (params.abstract) {
-    parts.push(`abs:"${params.abstract}"`);
-  }
-  if (params.category) {
-    parts.push(`cat:${params.category}`);
-  }
-  if (params.allFields) {
-    parts.push(`all:"${params.allFields}"`);
-  }
-
-  return parts.join("+AND+");
 }
 
 export function generateBibTeX(paper: ArxivPaper): string {
-  const year = paper.published.getFullYear();
-  const firstAuthor = paper.authors[0]?.split(" ").pop() || "Unknown";
-  const key = `${firstAuthor}${year}${paper.arxivId.replace(".", "")}`;
-
+  const year = new Date(paper.published).getFullYear();
+  const firstAuthor = paper.authors[0]?.trim().split(/\s+/).pop() || "Unknown";
+  const key = `${firstAuthor}${year}${paper.arxivId.replace(/[^a-zA-Z0-9]/g, "")}`;
   return `@article{${key},
   title={${paper.title}},
   author={${paper.authors.join(" and ")}},
