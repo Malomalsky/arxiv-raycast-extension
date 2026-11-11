@@ -1,441 +1,407 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import {
-  List,
-  ActionPanel,
   Action,
+  ActionPanel,
+  Alert,
+  confirmAlert,
+  Form,
   Icon,
-  showToast,
-  Toast,
-  getPreferenceValues,
-  LocalStorage,
-  Detail,
-  Color,
+  List,
+  useNavigation,
 } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
-import { searchArxiv, buildSmartQuery, generateBibTeX } from "./api/arxiv";
+import {
+  showFailureToast,
+  useCachedPromise,
+  useCachedState,
+  useForm,
+  usePromise,
+} from "@raycast/utils";
+import { searchArxiv } from "./api/arxiv";
 import { getBatchCitations } from "./api/semanticScholar";
-import {
-  ArxivPaper,
-  SearchFilter,
-  SearchHistory,
-  ARXIV_CATEGORIES,
-} from "./types";
-import { format } from "date-fns";
-import { downloadPDF } from "./utils/pdfManager";
-import {
-  getReadingStatus,
-  setReadingStatus,
-  isDownloaded,
-} from "./utils/readingStatus";
-import { generateGOSTCitation } from "./utils/gostCitation";
-import { formatLatexTitle } from "./utils/latexFormatter";
+import { ARXIV_CATEGORIES, SearchFilter, SearchHistory } from "./types";
+import { useLibrary } from "./hooks/useLibrary";
+import { PaperListItem } from "./components/PaperListItem";
+import { readItems, updateItems } from "./utils/storage";
 
-interface Preferences {
-  defaultSortBy: "relevance" | "submittedDate" | "lastUpdatedDate";
-  defaultDateRange: "week" | "month" | "year" | "all";
-  favoriteCategories: string;
-}
+const DEFAULT_FILTER: SearchFilter = {
+  sortBy: "relevance",
+  sortOrder: "descending",
+  dateRange: "all",
+};
+const DATE_RANGES = {
+  all: "All Time",
+  today: "Today",
+  week: "Past Week",
+  month: "Past Month",
+  year: "Past Year",
+  custom: "Custom Dates",
+};
+const SORT_ORDERS: { value: SearchFilter["sortBy"]; title: string }[] = [
+  { value: "relevance", title: "Relevance" },
+  { value: "submittedDate", title: "Newest" },
+  { value: "lastUpdatedDate", title: "Recently Updated" },
+  { value: "citationCount", title: "Citations (First 100)" },
+];
 
 export default function SearchCommand() {
   const [searchText, setSearchText] = useState("");
-  const [filter, setFilter] = useState<SearchFilter>({
-    sortBy: "relevance",
-    sortOrder: "descending",
-    dateRange: "all",
-  });
-  const [isShowingDetail, setIsShowingDetail] = useState(false);
-
-  const preferences = getPreferenceValues<Preferences>();
-
-  useEffect(() => {
-    setFilter({
-      sortBy: preferences.defaultSortBy || "relevance",
-      sortOrder: "descending",
-      dateRange: "all",
-    });
-  }, []);
-
-  const { data, isLoading, revalidate } = useCachedPromise(
-    async (query: string, filter: SearchFilter) => {
-      if (!query || query.length < 1) {
-        return { papers: [], totalResults: 0 };
-      }
-
-      // Save to search history
-      const history: SearchHistory = {
-        query,
-        timestamp: new Date(),
-        resultsCount: 0,
-      };
-
-      try {
-        const maxResults = filter.sortBy === "citationCount" ? 100 : 30;
-        const result = await searchArxiv(query, filter, maxResults);
-        history.resultsCount = result.totalResults;
-
-        const historyKey = "search-history";
-        const existingHistory = await LocalStorage.getItem<string>(historyKey);
-        const historyArray = existingHistory ? JSON.parse(existingHistory) : [];
-        historyArray.unshift(history);
-        await LocalStorage.setItem(
-          historyKey,
-          JSON.stringify(historyArray.slice(0, 100)),
-        );
-
-        let papersWithMetadata = result.papers;
-
-        if (filter.sortBy === "citationCount") {
-          showToast({
-            style: Toast.Style.Animated,
-            title: "Loading citations...",
-          });
-          const arxivIds = result.papers.map((p) => p.arxivId);
-          const citations = await getBatchCitations(arxivIds);
-
-          papersWithMetadata = result.papers.map((paper) => ({
-            ...paper,
-            citationCount: citations.get(paper.arxivId) || 0,
-          }));
-
-          papersWithMetadata.sort((a, b) => {
-            const aCount = a.citationCount || 0;
-            const bCount = b.citationCount || 0;
-            return bCount - aCount;
-          });
-
-          papersWithMetadata = papersWithMetadata.slice(0, 30);
-        }
-
-        // Skip reading status check for performance
-
-        return {
-          papers: papersWithMetadata,
-          totalResults: result.totalResults,
-        };
-      } catch (error) {
-        showToast({
-          style: Toast.Style.Failure,
-          title: "Search failed",
-          message: String(error),
-        });
-        return { papers: [], totalResults: 0 };
-      }
-    },
-    [searchText, filter],
-    {
-      keepPreviousData: true,
-    },
+  const [filter, setFilter] = useCachedState<SearchFilter>(
+    "search-filter",
+    DEFAULT_FILTER,
   );
+  const [showDetail, setShowDetail] = useCachedState("show-paper-detail", true);
+  const abortable = useRef<AbortController | null>(null);
+  const library = useLibrary();
+  const { data: history = [], revalidate: refreshHistory } = usePromise(() =>
+    readItems<SearchHistory>("search-history"),
+  );
+  const query = searchText.trim();
+  const {
+    data: papers,
+    error,
+    isLoading,
+    pagination,
+    revalidate,
+  } = useCachedPromise(
+    (text: string, searchFilter: SearchFilter) =>
+      async ({ page }: { page: number }) => {
+        const signal = abortable.current?.signal;
+        const byCitations = searchFilter.sortBy === "citationCount";
+        const pageSize = byCitations ? 100 : 30;
+        const result = await searchArxiv(
+          text,
+          searchFilter,
+          pageSize,
+          page * pageSize,
+          signal,
+        );
+        let data = result.papers;
+        if (byCitations) {
+          const citations = await getBatchCitations(
+            data.map((paper) => paper.arxivId),
+            signal,
+          );
+          data = data.map((paper) => ({
+            ...paper,
+            citationCount: citations.get(paper.arxivId),
+          }));
+          data.sort(
+            (a, b) => (b.citationCount ?? -1) - (a.citationCount ?? -1),
+          );
+        }
+        signal?.throwIfAborted();
+        if (page === 0) {
+          try {
+            await updateItems<SearchHistory>("search-history", (items) =>
+              [
+                {
+                  query: text,
+                  timestamp: new Date().toISOString(),
+                  resultsCount: result.totalResults,
+                },
+                ...items.filter((item) => item.query !== text),
+              ].slice(0, 50),
+            );
+            await refreshHistory();
+          } catch (error) {
+            await showFailureToast(error, {
+              title: "Could not save search history",
+            });
+          }
+        }
+        return {
+          data,
+          hasMore: !byCitations && (page + 1) * pageSize < result.totalResults,
+        };
+      },
+    [query, filter],
+    { abortable, execute: query.length > 0, keepPreviousData: false },
+  );
+  const filtersActive =
+    filter.dateRange !== "all" || Boolean(filter.categories?.length);
+  const loadingPapers = query.length > 0 && (isLoading || (!papers && !error));
+  const filterSummary = [
+    filter.dateRange ? DATE_RANGES[filter.dateRange] : "All Time",
+    ...(filter.categories || []),
+  ].join(" · ");
 
-  const papers = data?.papers || [];
-  const totalResults = data?.totalResults || 0;
+  const searchActions = (
+    <ActionPanel.Section>
+      <Action.Push
+        title={filtersActive ? "Edit Filters" : "Filter Papers"}
+        icon={Icon.Filter}
+        target={<SearchFiltersForm filter={filter} onApply={setFilter} />}
+        shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
+      />
+      {filtersActive && (
+        <Action
+          title="Reset Filters"
+          icon={Icon.ArrowCounterClockwise}
+          onAction={() =>
+            setFilter({
+              ...filter,
+              dateRange: "all",
+              categories: undefined,
+              customDateStart: undefined,
+              customDateEnd: undefined,
+            })
+          }
+        />
+      )}
+      {query && (
+        <Action
+          title="Refresh Results"
+          icon={Icon.ArrowClockwise}
+          onAction={revalidate}
+          shortcut={{ modifiers: ["cmd"], key: "r" }}
+        />
+      )}
+      {library.error && (
+        <Action
+          title="Reload Library"
+          icon={Icon.ArrowClockwise}
+          onAction={library.revalidate}
+        />
+      )}
+      {!query && history.length > 0 && (
+        <Action
+          title="Clear Search History"
+          icon={Icon.Trash}
+          style={Action.Style.Destructive}
+          onAction={async () => {
+            if (
+              await confirmAlert({
+                title: "Clear Search History?",
+                primaryAction: {
+                  title: "Clear",
+                  style: Alert.ActionStyle.Destructive,
+                },
+              })
+            ) {
+              await updateItems<SearchHistory>("search-history", () => []);
+              await refreshHistory();
+            }
+          }}
+        />
+      )}
+    </ActionPanel.Section>
+  );
 
   return (
     <List
-      isLoading={isLoading}
+      navigationTitle="Search Papers"
       searchText={searchText}
       onSearchTextChange={setSearchText}
-      searchBarPlaceholder="Search papers (use ti:, au:, abs:, cat: for specific fields)"
-      isShowingDetail={isShowingDetail}
+      searchBarPlaceholder="Search titles, authors, or an arXiv query…"
+      throttle
+      filtering={false}
+      isLoading={loadingPapers || library.isLoading}
+      isShowingDetail={query.length > 0 && showDetail}
+      pagination={query ? pagination : undefined}
+      actions={<ActionPanel>{searchActions}</ActionPanel>}
       searchBarAccessory={
         <List.Dropdown
-          tooltip="Sort By"
+          tooltip="Sort Papers"
           value={filter.sortBy}
-          onChange={(value) => {
-            setFilter({
-              ...filter,
-              sortBy: value as any,
-            });
-            revalidate();
-          }}
+          onChange={(value) =>
+            setFilter({ ...filter, sortBy: value as SearchFilter["sortBy"] })
+          }
         >
-          <List.Dropdown.Item title="Relevance" value="relevance" />
-          <List.Dropdown.Item title="Most Recent" value="submittedDate" />
-          <List.Dropdown.Item title="Most Cited" value="citationCount" />
-          <List.Dropdown.Item
-            title="Recently Updated"
-            value="lastUpdatedDate"
-          />
+          {SORT_ORDERS.map((sort) => (
+            <List.Dropdown.Item
+              key={sort.value}
+              value={sort.value}
+              title={sort.title}
+            />
+          ))}
         </List.Dropdown>
       }
     >
-      {searchText.length > 0 && (
+      {!query && history.length > 0 ? (
+        <List.Section title="Recent Searches" subtitle={filterSummary}>
+          {history.slice(0, 10).map((item) => (
+            <List.Item
+              key={item.query}
+              title={item.query}
+              icon={Icon.Clock}
+              accessories={[
+                {
+                  text: `${item.resultsCount.toLocaleString()} ${item.resultsCount === 1 ? "match" : "matches"}`,
+                },
+              ]}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title="Search Again"
+                    icon={Icon.MagnifyingGlass}
+                    onAction={() => setSearchText(item.query)}
+                  />
+                  {searchActions}
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      ) : null}
+      {!query && history.length === 0 && (
+        <List.EmptyView
+          icon={Icon.MagnifyingGlass}
+          title="Search arXiv"
+          description={
+            "Try “graph neural networks”, “au:Hinton” or “cat:cs.LG”."
+          }
+        />
+      )}
+      {loadingPapers && !error && !papers?.length && (
+        <List.EmptyView
+          icon={Icon.MagnifyingGlass}
+          title="Searching arXiv"
+          description="Fetching papers and applying your filters…"
+        />
+      )}
+      {query && error && (
+        <List.EmptyView
+          icon={Icon.ExclamationMark}
+          title="Could Not Load Papers"
+          description={error.message}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Try Again"
+                icon={Icon.ArrowClockwise}
+                onAction={revalidate}
+              />
+              {searchActions}
+            </ActionPanel>
+          }
+        />
+      )}
+      {query && !error && papers?.length === 0 && !isLoading && (
+        <List.EmptyView
+          icon={Icon.MagnifyingGlass}
+          title="No Papers Found"
+          description={
+            filtersActive
+              ? "Try another query or reset the filters."
+              : "Try a broader query or a different author."
+          }
+          actions={<ActionPanel>{searchActions}</ActionPanel>}
+        />
+      )}
+      {query && !error && papers && papers.length > 0 && (
         <List.Section
-          title={`Found ${totalResults} papers`}
+          title="Papers"
           subtitle={
-            filter.dateRange !== "all"
-              ? `From last ${filter.dateRange}`
-              : "All time"
+            filter.sortBy === "citationCount"
+              ? "Sorted within the first 100 matches"
+              : filterSummary
           }
         >
           {papers.map((paper) => (
             <PaperListItem
               key={paper.id}
               paper={paper}
-              isShowingDetail={isShowingDetail}
-              onToggleDetail={() => setIsShowingDetail(!isShowingDetail)}
+              library={library}
+              showDetail={showDetail}
+              onToggleDetail={() => setShowDetail(!showDetail)}
+              actions={searchActions}
             />
           ))}
         </List.Section>
-      )}
-
-      {searchText.length === 0 && (
-        <List.EmptyView
-          title="Start typing to search arXiv"
-          description="Use prefixes: ti: for title, au: for author, abs: for abstract, cat: for category"
-          icon={Icon.MagnifyingGlass}
-        />
       )}
     </List>
   );
 }
 
-function PaperListItem({
-  paper,
-  isShowingDetail,
-  onToggleDetail,
+function SearchFiltersForm({
+  filter,
+  onApply,
 }: {
-  paper: ArxivPaper;
-  isShowingDetail: boolean;
-  onToggleDetail: () => void;
+  filter: SearchFilter;
+  onApply: (filter: SearchFilter) => void;
 }) {
-  const [isBookmarked, setIsBookmarked] = useState(false);
-
-  useEffect(() => {
-    checkIfBookmarked();
-  }, []);
-
-  async function checkIfBookmarked() {
-    const bookmarks = await LocalStorage.getItem<string>("bookmarks");
-    if (bookmarks) {
-      const bookmarkList = JSON.parse(bookmarks);
-      setIsBookmarked(bookmarkList.some((b: any) => b.paperId === paper.id));
-    }
-  }
-
-  async function toggleBookmark() {
-    const bookmarksKey = "bookmarks";
-    const bookmarksStr = await LocalStorage.getItem<string>(bookmarksKey);
-    const bookmarks = bookmarksStr ? JSON.parse(bookmarksStr) : [];
-
-    if (isBookmarked) {
-      const filtered = bookmarks.filter((b: any) => b.paperId !== paper.id);
-      await LocalStorage.setItem(bookmarksKey, JSON.stringify(filtered));
-      setIsBookmarked(false);
-      showToast({
-        style: Toast.Style.Success,
-        title: "Removed from bookmarks",
+  const { pop } = useNavigation();
+  type FilterValues = {
+    dateRange: string;
+    category: string;
+    start: Date | null;
+    end: Date | null;
+  };
+  const form: ReturnType<typeof useForm<FilterValues>> = useForm<FilterValues>({
+    initialValues: {
+      dateRange: filter.dateRange || "all",
+      category: filter.categories?.[0] || "",
+      start: filter.customDateStart ? new Date(filter.customDateStart) : null,
+      end: filter.customDateEnd ? new Date(filter.customDateEnd) : null,
+    },
+    validation: {
+      start: (date) =>
+        form.values.dateRange === "custom" && !date
+          ? "Choose a start date."
+          : undefined,
+      end: (date) => {
+        if (form.values.dateRange !== "custom") return;
+        if (!date) return "Choose an end date.";
+        if (form.values.start && date < form.values.start)
+          return "End date must follow the start date.";
+      },
+    },
+    onSubmit(values) {
+      const end = values.end ? new Date(values.end) : undefined;
+      end?.setHours(23, 59, 59, 999);
+      onApply({
+        ...filter,
+        dateRange: values.dateRange as SearchFilter["dateRange"],
+        categories: values.category ? [values.category] : undefined,
+        customDateStart: values.start?.toISOString(),
+        customDateEnd: end?.toISOString(),
       });
-    } else {
-      bookmarks.unshift({
-        paperId: paper.id,
-        paper,
-        addedAt: new Date(),
-        tags: [],
-      });
-      await LocalStorage.setItem(bookmarksKey, JSON.stringify(bookmarks));
-      setIsBookmarked(true);
-      showToast({ style: Toast.Style.Success, title: "Added to bookmarks" });
-    }
-  }
-
-  const categoryColor = getCategoryColor(paper.primaryCategory);
-  const year = paper.published.getFullYear();
-  const authorsStr =
-    paper.authors.slice(0, 2).join(", ") +
-    (paper.authors.length > 2 ? " et al." : "");
-
-  const accessories = [];
-
-  if (paper.citationCount !== undefined && paper.citationCount > 0) {
-    accessories.push({
-      text: `${paper.citationCount}`,
-      tooltip: `${paper.citationCount} citations`,
-    });
-  }
-
-  accessories.push({
-    tag: { value: paper.primaryCategory, color: categoryColor },
+      pop();
+    },
   });
-
-  if (paper.isDownloaded) {
-    accessories.push({ icon: Icon.Checkmark, tooltip: "Downloaded" });
-  } else if (paper.readingStatus === "read") {
-    accessories.push({ icon: Icon.CheckCircle, tooltip: "Read" });
-  }
-
+  const { handleSubmit, itemProps, values } = form;
   return (
-    <List.Item
-      id={paper.id}
-      title={formatLatexTitle(paper.title)}
-      subtitle={`${authorsStr}, ${year}`}
-      accessories={accessories}
-      detail={
-        isShowingDetail && (
-          <List.Item.Detail
-            markdown={generatePaperMarkdown(paper)}
-            metadata={
-              <List.Item.Detail.Metadata>
-                <List.Item.Detail.Metadata.Label
-                  title="arXiv ID"
-                  text={paper.arxivId}
-                />
-                <List.Item.Detail.Metadata.Label
-                  title="Published"
-                  text={formattedDate}
-                />
-                <List.Item.Detail.Metadata.Label
-                  title="Updated"
-                  text={format(paper.updated, "MMM d, yyyy")}
-                />
-                <List.Item.Detail.Metadata.Separator />
-                <List.Item.Detail.Metadata.Label title="Authors" />
-                {paper.authors.map((author, i) => (
-                  <List.Item.Detail.Metadata.Label
-                    key={i}
-                    title=""
-                    text={author}
-                  />
-                ))}
-                <List.Item.Detail.Metadata.Separator />
-                <List.Item.Detail.Metadata.TagList title="Categories">
-                  {paper.categories.map((cat) => (
-                    <List.Item.Detail.Metadata.TagList.Item
-                      key={cat}
-                      text={cat}
-                      color={getCategoryColor(cat)}
-                    />
-                  ))}
-                </List.Item.Detail.Metadata.TagList>
-                {paper.doi && (
-                  <List.Item.Detail.Metadata.Link
-                    title="DOI"
-                    text={paper.doi}
-                    target={`https://doi.org/${paper.doi}`}
-                  />
-                )}
-                {paper.journalRef && (
-                  <List.Item.Detail.Metadata.Label
-                    title="Journal"
-                    text={paper.journalRef}
-                  />
-                )}
-              </List.Item.Detail.Metadata>
-            }
-          />
-        )
-      }
+    <Form
+      navigationTitle="Search Filters"
       actions={
         <ActionPanel>
-          <ActionPanel.Section>
-            <Action.OpenInBrowser title="Open in arXiv" url={paper.arxivUrl} />
-            <Action
-              title="Download and Open PDF"
-              icon={Icon.Download}
-              onAction={async () => {
-                await downloadPDF(paper);
-              }}
-              shortcut={{ modifiers: ["cmd"], key: "d" }}
-            />
-            <Action
-              title={
-                isBookmarked ? "Remove from Bookmarks" : "Add to Bookmarks"
-              }
-              icon={isBookmarked ? Icon.BookmarkDisabled : Icon.Bookmark}
-              onAction={toggleBookmark}
-              shortcut={{ modifiers: ["cmd"], key: "b" }}
-            />
-          </ActionPanel.Section>
-          <ActionPanel.Section title="Citations">
-            <Action.CopyToClipboard
-              title="Copy BibTeX"
-              content={generateBibTeX(paper)}
-              icon={Icon.Document}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
-            />
-            <Action.CopyToClipboard
-              title="Copy GOST Citation"
-              content={generateGOSTCitation(paper)}
-              icon={Icon.Document}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "g" }}
-            />
-          </ActionPanel.Section>
-          <ActionPanel.Section title="Reading Status">
-            <Action
-              title="Mark as Read"
-              icon={Icon.Checkmark}
-              onAction={() => setReadingStatus(paper.id, "read")}
-            />
-            <Action
-              title="Mark as Reading"
-              icon={Icon.Eye}
-              onAction={() => setReadingStatus(paper.id, "reading")}
-            />
-            <Action
-              title="Mark as New"
-              icon={Icon.Circle}
-              onAction={() => setReadingStatus(paper.id, "new")}
-            />
-          </ActionPanel.Section>
-          <ActionPanel.Section>
-            <Action
-              title="Toggle Details"
-              icon={Icon.Eye}
-              onAction={onToggleDetail}
-              shortcut={{ modifiers: ["cmd"], key: "y" }}
-            />
-            <Action.CopyToClipboard
-              title="Copy arXiv ID"
-              content={paper.arxivId}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
-            />
-            <Action.CopyToClipboard
-              title="Copy Title"
-              content={paper.title}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
-            />
-            <Action.CopyToClipboard
-              title="Copy Abstract"
-              content={paper.abstract}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
-            />
-          </ActionPanel.Section>
+          <Action.SubmitForm title="Apply Filters" onSubmit={handleSubmit} />
         </ActionPanel>
       }
-    />
+    >
+      <Form.Dropdown title="Published" {...itemProps.dateRange}>
+        {Object.entries(DATE_RANGES).map(([value, title]) => (
+          <Form.Dropdown.Item key={value} value={value} title={title} />
+        ))}
+      </Form.Dropdown>
+      {values.dateRange === "custom" && (
+        <>
+          <Form.DatePicker
+            title="From"
+            type={Form.DatePicker.Type.Date}
+            {...itemProps.start}
+          />
+          <Form.DatePicker
+            title="Through"
+            type={Form.DatePicker.Type.Date}
+            {...itemProps.end}
+          />
+        </>
+      )}
+      <Form.Dropdown title="Category" {...itemProps.category}>
+        <Form.Dropdown.Item value="" title="All Categories" />
+        {Object.entries(ARXIV_CATEGORIES).map(([group, categories]) => (
+          <Form.Dropdown.Section key={group} title={group}>
+            {Object.entries(categories).map(([code, name]) => (
+              <Form.Dropdown.Item
+                key={code}
+                value={code}
+                title={`${name} (${code})`}
+              />
+            ))}
+          </Form.Dropdown.Section>
+        ))}
+      </Form.Dropdown>
+    </Form>
   );
-}
-
-function getCategoryColor(category: string): Color {
-  if (category.startsWith("cs.")) return Color.Blue;
-  if (category.startsWith("math.")) return Color.Green;
-  if (category.startsWith("physics.") || category.includes("-ph"))
-    return Color.Orange;
-  if (category.startsWith("q-bio.")) return Color.Purple;
-  if (category.startsWith("q-fin.")) return Color.Yellow;
-  if (category.startsWith("stat.")) return Color.Red;
-  if (category.startsWith("econ.")) return Color.Magenta;
-  if (category.startsWith("eess.")) return Color.PrimaryText;
-  return Color.SecondaryText;
-}
-
-function generatePaperMarkdown(paper: ArxivPaper): string {
-  return `# ${paper.title}
-
-**Authors:** ${paper.authors.join(", ")}
-
-**Published:** ${format(paper.published, "MMMM d, yyyy")}
-
-## Abstract
-
-${paper.abstract}
-
-${paper.comment ? `\n## Comments\n\n${paper.comment}` : ""}
-
-## Links
-
-- [View on arXiv](${paper.arxivUrl})
-- [Download PDF](${paper.pdfUrl})
-${paper.doi ? `- [DOI: ${paper.doi}](https://doi.org/${paper.doi})` : ""}
-`;
 }
